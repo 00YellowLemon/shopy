@@ -5,13 +5,13 @@ import { PRODUCTS, getSlug, Product, ColorOption } from "../data/products";
 import { useCart, getStoragePriceModifier } from "../context/CartContext";
 import Header from "./Header";
 import CartDrawer from "./CartDrawer";
+import AssistantDrawer from "./AssistantDrawer";
 import {
   ShoppingCart,
   ArrowLeft,
   Star,
   Check,
   Cpu,
-  Layers,
   Smartphone,
   ChevronRight,
   Sparkles,
@@ -511,6 +511,9 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
 
       {/* Global slide-over Cart drawer */}
       <CartDrawer />
+
+      {/* Interactive AI Shop Assistant floating widget */}
+      <AssistantDrawer />
     </div>
   );
 }

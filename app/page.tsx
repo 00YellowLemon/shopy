@@ -5,6 +5,7 @@ import Header from "./components/Header";
 import HeroSection from "./components/HeroSection";
 import ProductCard from "./components/ProductCard";
 import CartDrawer from "./components/CartDrawer";
+import AssistantDrawer from "./components/AssistantDrawer";
 import { PRODUCTS } from "./data/products";
 import { Sparkles, SlidersHorizontal, ArrowUpDown } from "lucide-react";
 
@@ -114,7 +115,7 @@ export default function Home() {
               <ArrowUpDown className="h-3.5 w-3.5 text-zinc-500" />
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
                 className="bg-transparent text-zinc-300 border-none outline-none cursor-pointer pr-1"
               >
                 <option value="featured" className="bg-zinc-900 text-zinc-300">Featured</option>
@@ -158,6 +159,9 @@ export default function Home() {
 
       {/* Global slide-over Cart component */}
       <CartDrawer />
+
+      {/* Interactive AI Shop Assistant floating widget */}
+      <AssistantDrawer />
     </div>
   );
 }

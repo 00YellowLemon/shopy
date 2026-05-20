@@ -27,7 +27,6 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function getStoragePriceModifier(baseStorage: string[], selectedStorage: string): number {
   if (selectedStorage === "N/A" || !baseStorage.includes(selectedStorage)) return 0;
-  const baseIdx = 0;
   const selIdx = baseStorage.indexOf(selectedStorage);
   if (selIdx <= 0) return 0;
   
@@ -37,32 +36,29 @@ export function getStoragePriceModifier(baseStorage: string[], selectedStorage: 
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Load cart from localStorage on mount
-  useEffect(() => {
-    try {
-      const storedCart = localStorage.getItem("shopy_cart");
-      if (storedCart) {
-        setCart(JSON.parse(storedCart));
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedCart = localStorage.getItem("shopy_cart");
+        if (storedCart) {
+          return JSON.parse(storedCart);
+        }
+      } catch (e) {
+        console.error("Failed to load cart from localStorage", e);
       }
-    } catch (e) {
-      console.error("Failed to load cart from localStorage", e);
     }
-    setIsInitialized(true);
-  }, []);
+    return [];
+  });
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
-    if (!isInitialized) return;
     try {
       localStorage.setItem("shopy_cart", JSON.stringify(cart));
     } catch (e) {
       console.error("Failed to save cart to localStorage", e);
     }
-  }, [cart, isInitialized]);
+  }, [cart]);
 
   const addToCart = (product: Product, color: ColorOption, storage: string) => {
     const modifier = getStoragePriceModifier(product.specs.storage_capacities, storage);
