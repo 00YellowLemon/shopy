@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
+/* Design Tokens & Theme Configuration */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #09090b; /* Zinc 950 obsidian dark base */
+  --foreground: #f4f4f5; /* Zinc 100 premium white */
+  --primary-accent: #a855f7; /* Purple accent */
+  --secondary-accent: #ec4899; /* Pink accent */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Reset and Global Styles */
+html,
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Premium Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a; /* Zinc 800 */
+  border-radius: 9999px;
+  border: 2px solid #09090b;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46; /* Zinc 700 */
+}
+
+/* Glassmorphism Accents */
+.glass-panel {
+  background: rgba(9, 9, 11, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Custom Micro-interactive Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.25;
+    transform: scale(1.05);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.glow-background {
+  animation: pulse-glow 8s ease-in-out infinite;
+}
+
+/* Selectable card scale-up triggers */
+.option-select-card {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.option-select-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -10px rgba(168, 85, 247, 0.2);
+}
+
+/* Fade-in Animation for Dynamic Product Images */
+.image-fade-enter {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.image-fade-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
 }
