@@ -17,6 +17,7 @@ export interface Product {
   description: string;
   specs: ProductSpecs;
   colors: ColorOption[];
+  slug?: string;
 }
 
 export function getSlug(name: string): string {

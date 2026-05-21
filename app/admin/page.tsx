@@ -12,7 +12,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   Lock,
@@ -34,7 +34,11 @@ import {
   LogOut,
   AlertTriangle,
   FolderOpen,
+  Edit,
+  Search,
+  Package,
 } from "lucide-react";
+import { Product } from "@/app/data/products";
 
 // Helper function to generate URL-safe slugs
 function getSlug(name: string): string {
@@ -48,6 +52,7 @@ interface ColorInput {
   color: string;
   file: File | null;
   previewUrl: string;
+  imageUrl?: string; // Existing storage URL when editing
 }
 
 export default function AdminPage() {
@@ -59,6 +64,19 @@ export default function AdminPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState("");
+
+  // Tabs & Catalog Management State
+  const [activeTab, setActiveTab] = useState<"publish" | "catalog">("publish");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [editingProductSlug, setEditingProductSlug] = useState<string | null>(null);
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
+
+  // Filtered products for catalog search
+  const filteredCatalogProducts = products.filter((p) => {
+    const searchStr = `${p.name} ${p.category} ${p.description} ${p.specs?.processor_chip || ""}`.toLowerCase();
+    return searchStr.includes(catalogSearchQuery.toLowerCase());
+  });
 
   // Product Form State
   const [name, setName] = useState("");
@@ -102,6 +120,102 @@ export default function AdminPage() {
       });
     };
   }, [colors]);
+
+  const fetchCatalogProducts = async () => {
+    if (!auth.currentUser) return;
+    setLoadingProducts(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "products"));
+      const fetchedProducts: Product[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedProducts.push(doc.data() as Product);
+      });
+      // Sort by release year descending
+      fetchedProducts.sort((a, b) => b.release_year - a.release_year);
+      setProducts(fetchedProducts);
+    } catch (err) {
+      console.error("Failed to fetch products for management:", err);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "catalog" && user) {
+      fetchCatalogProducts();
+    }
+  }, [activeTab, user]);
+
+  const handleDeleteProduct = async (slug: string, productName: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      setErrorMessage("");
+      setSuccessMessage("");
+      await deleteDoc(doc(db, "products", slug));
+      setSuccessMessage(`"${productName}" has been successfully deleted from the catalog.`);
+      fetchCatalogProducts();
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      console.error("Deletion error:", error);
+      setErrorMessage(error.message || "Failed to delete the product. Please try again.");
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    // Load states
+    setName(product.name);
+    setDescription(product.description);
+    setReleaseYear(product.release_year);
+    setStartingPrice(product.specs.starting_price);
+    setScreenSize(product.specs.screen_size);
+    setProcessorChip(product.specs.processor_chip);
+    setSelectedStorage(product.specs.storage_capacities);
+
+    // Category handling
+    const presets = ["Phone", "Laptop", "Audio", "Smartwatch", "Television", "Smart Home", "Gaming Console"];
+    if (presets.includes(product.category)) {
+      setCategory(product.category);
+      setCustomCategoryText("");
+    } else {
+      setCategory("custom");
+      setCustomCategoryText(product.category);
+    }
+
+    // Colors mapping
+    const loadedColors: ColorInput[] = product.colors.map((c) => ({
+      color: c.color,
+      file: null,
+      previewUrl: c.image_url,
+      imageUrl: c.image_url,
+    }));
+    setColors(loadedColors);
+
+    setEditingProductSlug(product.slug || getSlug(product.name));
+    setActiveTab("publish");
+    
+    // Smooth scroll to top of form
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProductSlug(null);
+    setName("");
+    setDescription("");
+    setStartingPrice("");
+    setScreenSize("");
+    setProcessorChip("");
+    setSelectedStorage([]);
+    setCustomCategoryText("");
+    setColors([{ color: "", file: null, previewUrl: "" }]);
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,45 +342,70 @@ export default function AdminPage() {
     if (!screenSize.trim()) return setErrorMessage("Screen Size is required.");
     if (!processorChip.trim()) return setErrorMessage("Processor Chip is required.");
     if (selectedStorage.length === 0) return setErrorMessage("Please select at least one Storage Capacity.");
-    if (colors.length === 0 || colors.some((c) => !c.color.trim() || !c.file)) {
-      return setErrorMessage("Please add at least one color option and upload an image for it.");
+    if (colors.length === 0 || colors.some((c) => !c.color.trim() || (!c.file && !c.imageUrl))) {
+      return setErrorMessage("Please add at least one color option and upload or retain an image for it.");
     }
 
     setSubmitting(true);
     const slug = getSlug(name);
+    const isEditMode = editingProductSlug !== null;
 
     try {
-      // 1. Check if product already exists to avoid unintended overwrites
       setUploadProgress("Checking product catalog...");
       const docRef = doc(db, "products", slug);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        throw new Error(`A product with name '${name}' (slug: '${slug}') already exists in the database.`);
+
+      if (isEditMode) {
+        // If they renamed the product (so slug is different from original)
+        if (slug !== editingProductSlug) {
+          // Verify new slug doesn't conflict with another existing product
+          const newDocSnap = await getDoc(docRef);
+          if (newDocSnap.exists()) {
+            throw new Error(`A product with name '${name}' (slug: '${slug}') already exists in the database.`);
+          }
+        }
+      } else {
+        // Publish mode: slug must not exist
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          throw new Error(`A product with name '${name}' (slug: '${slug}') already exists in the database.`);
+        }
       }
 
       // 2. Upload images sequentially to Firebase Storage
       const uploadedColors = [];
       for (let i = 0; i < colors.length; i++) {
         const item = colors[i];
-        setUploadProgress(`Uploading ${item.color} image (${i + 1}/${colors.length})...`);
         
-        // Storage path: products/{slug}/{colorName}_{timestamp}
-        const fileExtension = item.file!.name.split(".").pop() || "png";
-        const storagePath = `products/${slug}/${item.color.toLowerCase().replace(/[^a-z0-9]+/g, "-")}_${Date.now()}.${fileExtension}`;
-        const storageRef = ref(storage, storagePath);
-        
-        // Perform upload
-        const uploadSnapshot = await uploadBytes(storageRef, item.file!);
-        const downloadUrl = await getDownloadURL(uploadSnapshot.ref);
+        if (item.file) {
+          // Upload new file
+          setUploadProgress(`Uploading ${item.color} image (${i + 1}/${colors.length})...`);
+          
+          // Storage path: products/{slug}/{colorName}_{timestamp}
+          const fileExtension = item.file.name.split(".").pop() || "png";
+          const storagePath = `products/${slug}/${item.color.toLowerCase().replace(/[^a-z0-9]+/g, "-")}_${Date.now()}.${fileExtension}`;
+          const storageRef = ref(storage, storagePath);
+          
+          // Perform upload
+          const uploadSnapshot = await uploadBytes(storageRef, item.file);
+          const downloadUrl = await getDownloadURL(uploadSnapshot.ref);
 
-        uploadedColors.push({
-          color: item.color.trim(),
-          image_url: downloadUrl,
-        });
+          uploadedColors.push({
+            color: item.color.trim(),
+            image_url: downloadUrl,
+          });
+        } else if (item.imageUrl) {
+          // Reuse existing image
+          uploadedColors.push({
+            color: item.color.trim(),
+            image_url: item.imageUrl,
+          });
+        } else {
+          throw new Error(`Color "${item.color}" has no image file or URL.`);
+        }
       }
 
       // 3. Assemble and save final product details to Firestore
-      setUploadProgress("Publishing product to catalog...");
+      setUploadProgress(isEditMode ? "Saving product changes..." : "Publishing product to catalog...");
       const finalProduct = {
         name: name.trim(),
         category: finalCategory,
@@ -284,10 +423,21 @@ export default function AdminPage() {
 
       await setDoc(docRef, finalProduct);
 
+      // If we are in edit mode, and we renamed the product (so slug !== editingProductSlug), delete the old doc
+      if (isEditMode && slug !== editingProductSlug) {
+        setUploadProgress("Cleaning up outdated listing...");
+        await deleteDoc(doc(db, "products", editingProductSlug));
+      }
+
       // 4. Success feedback and clear inputs
-      setSuccessMessage(`Success! "${name}" has been published to the catalog.`);
+      setSuccessMessage(
+        isEditMode 
+          ? `Success! "${name}" changes have been saved.` 
+          : `Success! "${name}" has been published to the catalog.`
+      );
       
-      // Reset Form State
+      // Reset Form State & Edit State
+      setEditingProductSlug(null);
       setName("");
       setDescription("");
       setStartingPrice("");
@@ -296,6 +446,9 @@ export default function AdminPage() {
       setSelectedStorage([]);
       setCustomCategoryText("");
       setColors([{ color: "", file: null, previewUrl: "" }]);
+      
+      // Fetch latest products if we just updated or if we are looking at the catalog
+      fetchCatalogProducts();
       
     } catch (err: unknown) {
       const error = err as { message?: string };
@@ -544,15 +697,59 @@ export default function AdminPage() {
       <main className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 flex-1 flex flex-col">
         
         {/* Banner Headers */}
-        <div className="mb-10">
-          <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-purple-400" />
-            Launch New Product
-          </h2>
-          <p className="mt-1.5 text-xs text-zinc-500 max-w-2xl leading-relaxed">
-            Expand the Shopy catalog by creating a new premium product. All media files will be securely loaded to our
-            Firebase Storage bucket and connected in Firestore.
-          </p>
+        <div className="mb-8">
+          {activeTab === "publish" ? (
+            <>
+              <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                <Sparkles className="h-6 w-6 text-purple-400" />
+                {editingProductSlug ? "Update Product Specifications" : "Launch New Product"}
+              </h2>
+              <p className="mt-1.5 text-xs text-zinc-500 max-w-2xl leading-relaxed">
+                {editingProductSlug
+                  ? `Modify active properties for "${name || "Unnamed device"}". Saving changes will overwrite the current Firestore entry.`
+                  : "Expand the Shopy catalog by creating a new premium product. All media files will be securely loaded to our Firebase Storage bucket and connected in Firestore."}
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                <Package className="h-6 w-6 text-purple-400" />
+                Catalog Manager
+              </h2>
+              <p className="mt-1.5 text-xs text-zinc-500 max-w-2xl leading-relaxed">
+                View, filter, update, or remove existing devices from the live Shopy storefront database catalog.
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* Tab Controls */}
+        <div className="flex border-b border-zinc-900 mb-8 gap-4">
+          <button
+            onClick={() => setActiveTab("publish")}
+            className={`pb-4 text-sm font-bold border-b-2 px-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "publish"
+                ? "border-purple-500 text-white"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            {editingProductSlug ? "Edit Workspace" : "Launch Product"}
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("catalog");
+              fetchCatalogProducts();
+            }}
+            className={`pb-4 text-sm font-bold border-b-2 px-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "catalog"
+                ? "border-purple-500 text-white"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Package className="h-4 w-4" />
+            Manage Catalog
+          </button>
         </div>
 
         {/* Action Feedbacks */}
@@ -560,7 +757,7 @@ export default function AdminPage() {
           <div className="mb-8 flex items-start gap-3 rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-sm text-green-400 font-medium">
             <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400 mt-0.5 animate-bounce" />
             <div>
-              <p className="font-bold text-white mb-0.5">Product Published Successfully</p>
+              <p className="font-bold text-white mb-0.5">Operation Successful</p>
               <p className="text-xs text-zinc-400">{successMessage}</p>
             </div>
           </div>
@@ -570,19 +767,42 @@ export default function AdminPage() {
           <div className="mb-8 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-400 font-medium">
             <AlertTriangle className="h-5 w-5 shrink-0 text-red-400 mt-0.5" />
             <div>
-              <p className="font-bold text-white mb-0.5">Failed to Publish Product</p>
+              <p className="font-bold text-white mb-0.5">Operation Failed</p>
               <p className="text-xs text-zinc-400">{errorMessage}</p>
             </div>
           </div>
         )}
 
-        {/* Dashboard Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Dynamic Workspace Switcher */}
+        {activeTab === "publish" ? (
           
-          {/* LEFT: PRODUCT FORM PANEL */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="glass-panel p-6 sm:p-8 rounded-3xl shadow-xl">
-              <h3 className="text-lg font-bold text-white mb-6 border-b border-zinc-900 pb-3 flex items-center gap-2">
+          /* Dashboard Content Grid */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* LEFT: PRODUCT FORM PANEL */}
+            <div className="lg:col-span-7 space-y-6">
+              
+              {editingProductSlug && (
+                <div className="rounded-3xl border border-purple-500/20 bg-purple-500/5 p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Edit className="h-5 w-5 text-purple-400 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Active Product Edit Mode</h4>
+                      <p className="text-[10px] text-zinc-500">Currently editing {name || "Unnamed Product"}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-zinc-400 hover:text-white transition-all cursor-pointer hover:border-zinc-700"
+                  >
+                    Cancel Edit
+                  </button>
+                </div>
+              )}
+
+              <div className="glass-panel p-6 sm:p-8 rounded-3xl shadow-xl">
+                <h3 className="text-lg font-bold text-white mb-6 border-b border-zinc-900 pb-3 flex items-center gap-2">
                 <FolderOpen className="h-4 w-4 text-purple-400" />
                 Product Details Schema
               </h3>
@@ -820,7 +1040,7 @@ export default function AdminPage() {
                           >
                             <Upload className="h-3.5 w-3.5 text-purple-400" />
                             <span className="truncate max-w-[120px]">
-                              {item.file ? item.file.name : "Select Image"}
+                              {item.file ? item.file.name : item.imageUrl ? "Retained Image" : "Select Image"}
                             </span>
                           </label>
                           <input
@@ -829,7 +1049,7 @@ export default function AdminPage() {
                             accept="image/*"
                             onChange={(e) => handleImageFileChange(index, e.target.files?.[0] || null)}
                             className="sr-only"
-                            required={!item.file}
+                            required={!item.file && !item.imageUrl}
                             disabled={submitting}
                           />
 
@@ -853,24 +1073,39 @@ export default function AdminPage() {
                 </div>
 
                 {/* 7. Action Button Panel */}
-                <div className="border-t border-zinc-900 pt-6">
+                <div className="border-t border-zinc-900 pt-6 flex flex-col sm:flex-row gap-3">
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-95 text-white py-3.5 text-sm font-bold shadow-lg shadow-purple-500/10 cursor-pointer flex items-center justify-center gap-2 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:-translate-y-0 disabled:cursor-not-allowed"
+                    className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-95 text-white py-3.5 text-sm font-bold shadow-lg shadow-purple-500/10 cursor-pointer flex items-center justify-center gap-2 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:-translate-y-0 disabled:cursor-not-allowed"
                   >
                     {submitting ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin text-white" />
-                        <span>{uploadProgress || "Publishing..."}</span>
+                        <span>{uploadProgress || (editingProductSlug ? "Saving Changes..." : "Publishing...")}</span>
                       </>
                     ) : (
                       <>
-                        <Sparkles className="h-4 w-4 text-white" />
-                        <span>Publish Product to Catalog</span>
+                        {editingProductSlug ? (
+                          <CheckCircle2 className="h-4 w-4 text-white" />
+                        ) : (
+                          <Sparkles className="h-4 w-4 text-white" />
+                        )}
+                        <span>{editingProductSlug ? "Save Product Changes" : "Publish Product to Catalog"}</span>
                       </>
                     )}
                   </button>
+                  
+                  {editingProductSlug && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      disabled={submitting}
+                      className="rounded-xl border border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900 text-zinc-400 hover:text-white px-6 py-3.5 text-sm font-bold transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
                 </div>
 
               </form>
@@ -993,6 +1228,137 @@ export default function AdminPage() {
           </div>
 
         </div>
+        ) : (
+          /* Catalog Management View UI */
+          <div className="space-y-6">
+            {/* Search and Filters bar */}
+            <div className="glass-panel p-4 rounded-2xl flex flex-col md:flex-row gap-4 justify-between items-center bg-zinc-900/20 border border-zinc-900/80 shadow-md">
+              <div className="relative w-full md:max-w-md">
+                <Search className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
+                <input
+                  type="text"
+                  value={catalogSearchQuery}
+                  onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                  placeholder="Search products by name, category, processor..."
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2 pl-11 pr-4 text-sm text-white placeholder-zinc-500 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
+                />
+              </div>
+              <div className="text-xs font-semibold text-zinc-500 self-end md:self-auto shrink-0">
+                Found: <span className="text-white font-bold">{filteredCatalogProducts.length}</span> / {products.length} products
+              </div>
+            </div>
+
+            {loadingProducts ? (
+              <div className="flex flex-col items-center justify-center py-24 bg-zinc-900/10 border border-dashed border-zinc-800 rounded-3xl">
+                <Loader2 className="h-10 w-10 animate-spin text-purple-500" />
+                <p className="mt-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Syncing catalog index...</p>
+              </div>
+            ) : filteredCatalogProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-20 bg-zinc-900/10 border border-dashed border-zinc-800 rounded-3xl">
+                <Package className="h-12 w-12 text-zinc-750 mb-4" />
+                <h3 className="text-base font-bold text-white tracking-tight">No products found</h3>
+                <p className="mt-2 text-xs text-zinc-500 max-w-sm">
+                  {catalogSearchQuery
+                    ? "We couldn't find any products matching your search terms. Try adjusting your query."
+                    : "Your storefront catalog is empty. Head to the Launch Product tab to add your first device!"}
+                </p>
+                {catalogSearchQuery && (
+                  <button
+                    onClick={() => setCatalogSearchQuery("")}
+                    className="mt-4 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-white text-zinc-300 hover:text-black py-2 px-6 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {filteredCatalogProducts.map((p) => {
+                  const productSlug = p.slug || getSlug(p.name);
+                  return (
+                    <div
+                      key={productSlug}
+                      className="glass-panel p-5 rounded-3xl border border-zinc-900/80 bg-zinc-900/15 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-zinc-800/80 hover:bg-zinc-900/25 transition-all duration-300 relative group/tile"
+                    >
+                      {/* Product details info (image and texts) */}
+                      <div className="flex items-center gap-4 flex-1">
+                        {/* Thumbnail image */}
+                        <div className="h-16 w-16 shrink-0 rounded-2xl bg-zinc-950 border border-zinc-900 overflow-hidden flex items-center justify-center p-2 relative group-hover/tile:scale-[1.02] transition-transform duration-300">
+                          {p.colors[0]?.image_url ? (
+                            <img
+                              src={p.colors[0].image_url}
+                              alt={p.name}
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <Sparkles className="h-5 w-5 text-zinc-800" />
+                          )}
+                        </div>
+
+                        {/* Title and stats */}
+                        <div className="space-y-1.5 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-base font-bold text-white tracking-tight leading-snug truncate max-w-[240px] md:max-w-[360px]">
+                              {p.name}
+                            </h4>
+                            <span className="shrink-0 rounded-full bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 text-[9px] font-bold text-purple-400 uppercase tracking-widest">
+                              {p.category}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-zinc-500 font-bold">
+                              {p.release_year} Model
+                            </span>
+                          </div>
+                          
+                          <p className="text-xs text-zinc-400 font-semibold truncate max-w-[300px] md:max-w-[450px]">
+                            {p.description}
+                          </p>
+
+                          <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-2 flex-wrap">
+                            <span>Chip: <strong className="text-zinc-300">{p.specs.processor_chip}</strong></span>
+                            <span className="text-zinc-800">|</span>
+                            <span>Screen: <strong className="text-zinc-300">{p.specs.screen_size}</strong></span>
+                            <span className="text-zinc-800">|</span>
+                            <span>Colors: <strong className="text-zinc-300">{p.colors.map(c => c.color).join(", ")}</strong></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Pricing & Actions */}
+                      <div className="flex md:flex-col items-center md:items-end justify-between md:justify-center w-full md:w-auto shrink-0 gap-4 md:gap-2.5 border-t md:border-t-0 border-zinc-900 pt-4 md:pt-0">
+                        <div className="flex flex-col items-start md:items-end">
+                          <span className="text-[9px] font-extrabold text-zinc-600 uppercase tracking-widest">Starting Price</span>
+                          <span className="text-base font-extrabold text-white">${p.specs.starting_price.toLocaleString()}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Edit Product Button */}
+                          <button
+                            onClick={() => handleEditProduct(p)}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600/10 hover:bg-purple-600 border border-purple-500/20 hover:border-purple-500 text-purple-400 hover:text-white text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                            title="Edit specs"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                            <span>Edit</span>
+                          </button>
+
+                          {/* Delete Product Button */}
+                          <button
+                            onClick={() => handleDeleteProduct(productSlug, p.name)}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600/10 hover:bg-red-650 border border-red-500/20 hover:border-red-500 text-red-400 hover:text-white text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                            title="Remove product"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
       </main>
 
