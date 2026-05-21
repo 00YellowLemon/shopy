@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import Header from "./components/Header";
 import HeroSection from "./components/HeroSection";
 import ProductCard from "./components/ProductCard";
 import CartDrawer from "./components/CartDrawer";
 import AssistantDrawer from "./components/AssistantDrawer";
-import { Product } from "./data/products";
+import { Product, formatCategoryLabel } from "./data/products";
 import { Sparkles, SlidersHorizontal, ArrowUpDown } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
@@ -39,14 +40,13 @@ export default function Home() {
     fetchProducts();
   }, []);
 
+  // Dynamic Categories list based on catalog
+  const categoriesList = ["all", ...Array.from(new Set(products.map((p) => p.category)))];
+
   // Filtering Logic
   const filteredProducts = products.filter((product) => {
     // 1. Category Filtering
-    const matchesCategory =
-      activeCategory === "all" ||
-      product.category === activeCategory ||
-      // Special case: if Header set activeCategory to "Earbuds" representing Audio, show both Earbuds & Headphones
-      (activeCategory === "Earbuds" && (product.category === "Earbuds" || product.category === "Headphones"));
+    const matchesCategory = activeCategory === "all" || product.category === activeCategory;
 
     // 2. Search Query Filtering
     const searchString = `${product.name} ${product.category} ${product.description} ${product.specs.processor_chip}`.toLowerCase();
@@ -69,11 +69,8 @@ export default function Home() {
   });
 
   const activeCategoryTitle = () => {
-    if (activeCategory === "all") return "All Apple Products";
-    if (activeCategory === "Phone") return "iPhones & Handhelds";
-    if (activeCategory === "Laptop") return "MacBook Pro & Air Laptops";
-    if (activeCategory === "Earbuds" || activeCategory === "Headphones") return "Audio & Sound Gear";
-    return activeCategory;
+    if (activeCategory === "all") return "All Products";
+    return formatCategoryLabel(activeCategory);
   };
 
   return (
@@ -84,10 +81,11 @@ export default function Home() {
         setSearchQuery={setSearchQuery}
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
+        categories={categoriesList}
       />
 
       {/* Flagship Highlight Hero Section */}
-      {searchQuery === "" && activeCategory === "all" && <HeroSection products={products} />}
+      {searchQuery === "" && activeCategory === "all" && products.length > 0 && <HeroSection products={products} />}
 
       {/* Main Catalog Section */}
       <main className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 flex-1 flex flex-col">
@@ -100,7 +98,7 @@ export default function Home() {
               {searchQuery ? `Search Results for &quot;${searchQuery}&quot;` : activeCategoryTitle()}
             </h2>
             <p className="mt-1 text-xs text-zinc-500">
-              Showing {sortedProducts.length} premium premium devices
+              Showing {sortedProducts.length} premium products
             </p>
           </div>
 
@@ -108,31 +106,18 @@ export default function Home() {
           <div className="flex items-center gap-3 self-start sm:self-auto">
             
             {/* Category quick selectors for mobile */}
-            <div className="flex md:hidden items-center gap-1 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800">
-              <button
-                onClick={() => setActiveCategory("all")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${activeCategory === "all" ? "bg-zinc-800 text-white" : "text-zinc-400"}`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setActiveCategory("Phone")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${activeCategory === "Phone" ? "bg-zinc-800 text-white" : "text-zinc-400"}`}
-              >
-                Phones
-              </button>
-              <button
-                onClick={() => setActiveCategory("Laptop")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${activeCategory === "Laptop" ? "bg-zinc-800 text-white" : "text-zinc-400"}`}
-              >
-                Laptops
-              </button>
-              <button
-                onClick={() => setActiveCategory("Earbuds")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${activeCategory === "Earbuds" ? "bg-zinc-800 text-white" : "text-zinc-400"}`}
-              >
-                Audio
-              </button>
+            <div className="flex md:hidden items-center gap-1 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800 overflow-x-auto max-w-[200px] sm:max-w-[300px] no-scrollbar">
+              {categoriesList.slice(0, 5).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg whitespace-nowrap ${
+                    activeCategory === cat ? "bg-zinc-800 text-white" : "text-zinc-400"
+                  }`}
+                >
+                  {cat === "all" ? "All" : formatCategoryLabel(cat)}
+                </button>
+              ))}
             </div>
 
             {/* Sort Selector Dropdown */}
@@ -170,12 +155,26 @@ export default function Home() {
               </div>
             ))}
           </div>
+        ) : products.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center py-24 bg-zinc-900/10 border border-dashed border-zinc-800 rounded-3xl my-6 flex-1">
+            <Sparkles className="h-12 w-12 text-purple-400 mb-4 animate-pulse" />
+            <h3 className="text-lg font-bold text-white tracking-tight">Your Store Catalog is Empty</h3>
+            <p className="mt-2 text-xs text-zinc-500 max-w-md leading-relaxed">
+              Start building your store! Head to the Admin panel to authenticate and publish your first product to the catalog.
+            </p>
+            <Link
+              href="/admin"
+              className="mt-6 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-95 text-white py-2.5 px-6 text-xs font-bold transition-all shadow-md shadow-purple-500/10"
+            >
+              Go to Admin Panel
+            </Link>
+          </div>
         ) : sortedProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-20 bg-zinc-900/10 border border-dashed border-zinc-800 rounded-3xl my-6 flex-1">
             <SlidersHorizontal className="h-10 w-10 text-zinc-600 mb-4 animate-pulse" />
             <h3 className="text-base font-bold text-white tracking-tight">No products match search criteria</h3>
             <p className="mt-2 text-xs text-zinc-500 max-w-sm">
-              We couldn&apos;t find any Apple products matching your filters. Try checking your spelling or adjusting filters.
+              We couldn&apos;t find any products matching your filters. Try checking your spelling or adjusting filters.
             </p>
             <button
               onClick={() => {

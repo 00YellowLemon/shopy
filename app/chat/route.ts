@@ -42,27 +42,19 @@ function extractMentionedProducts(query: string, products: Product[]): Product[]
   for (const product of sortedProducts) {
     if (normalized.includes(product.name.toLowerCase())) {
       found.push(product);
-      // Remove matched product name from temp query to avoid double matching substrings
     }
   }
 
-  // Fallback to partial word matching if no exact matches found
+  // Fallback to partial word matching in product names from our inventory, NOT hardcoded Apple models!
   if (found.length === 0) {
-    if (normalized.includes("16 pro max")) return [products.find(p => p.name === "iPhone 16 Pro Max")!];
-    if (normalized.includes("16 pro")) return [products.find(p => p.name === "iPhone 16 Pro")!];
-    if (normalized.includes("16 plus")) return [products.find(p => p.name === "iPhone 16 Plus")!];
-    if (normalized.includes("iphone 16")) return [products.find(p => p.name === "iPhone 16")!];
-    if (normalized.includes("15 pro max")) return [products.find(p => p.name === "iPhone 15 Pro Max")!];
-    if (normalized.includes("15 pro")) return [products.find(p => p.name === "iPhone 15 Pro")!];
-    if (normalized.includes("15 plus")) return [products.find(p => p.name === "iPhone 15 Plus")!];
-    if (normalized.includes("iphone 15")) return [products.find(p => p.name === "iPhone 15")!];
-    if (normalized.includes("max (usb-c)") || normalized.includes("airpods max")) return [products.find(p => p.name === "AirPods Max (USB-C)")!];
-    if (normalized.includes("pro 2") || normalized.includes("airpods pro")) return [products.find(p => p.name === "AirPods Pro 2 (USB-C)")!];
-    if (normalized.includes("airpods 4 anc") || normalized.includes("airpods 4 noise")) return [products.find(p => p.name === "AirPods 4 with Active Noise Cancellation")!];
-    if (normalized.includes("airpods 4")) return [products.find(p => p.name === "AirPods 4")!];
-    if (normalized.includes("solo 4")) return [products.find(p => p.name === "Beats Solo 4")!];
-    if (normalized.includes("studio pro")) return [products.find(p => p.name === "Beats Studio Pro")!];
-    if (normalized.includes("buds+")) return [products.find(p => p.name === "Beats Studio Buds+")!];
+    for (const product of sortedProducts) {
+      // Split product name into tokens to check if user's query mentions significant parts of it
+      const nameTokens = product.name.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+      if (nameTokens.length > 0 && nameTokens.every(token => normalized.includes(token))) {
+        found.push(product);
+        break; // Match the first best one
+      }
+    }
   }
 
   return found.filter(Boolean);
@@ -135,12 +127,12 @@ export async function POST(req: NextRequest) {
       normalizedQuery.includes("who are you") ||
       normalizedQuery.includes("help")
     ) {
-      reply = `Hello! 👋 Welcome to **Shopy**, your premium destination for top-tier Apple & Beats audio gear. 
+      reply = `Hello! 👋 Welcome to **Shopy**, your premium destination for top-tier consumer electronics, tech gear, and smart devices. 
 
 I am your dedicated **Shopy Assistant**, an expert on our complete inventory. I can help you:
-- 📱 Compare specifications across standard & Pro iPhones
-- 💻 Find the perfect MacBook Pro or Air for your workflow
-- 🎧 Compare high-fidelity ANC earbuds and headphones
+- 📱 Compare specifications and features of our latest models
+- 💻 Find the perfect device for your specific workflow
+- 🎧 Explore high-fidelity audio, smartwear, and entertainment accessories
 - 🚚 Explain our **free premium shipping** and **comprehensive product warranties**
 
 What kind of device are you looking to explore today?`;
@@ -161,12 +153,12 @@ We want you to shop with absolute peace of mind. Every single order from Shopy i
 
 - 🚚 **Free Premium Shipping:** Fully tracked, signature-guaranteed shipping on all orders, arriving in 2-3 business days.
 - 🛡️ **Comprehensive 1-Year Warranty:** Covers all manufacturing defects, battery health anomalies, and hardware concerns.
-- 🔄 **30-Day Easy Returns:** No restocking fees. If you're not completely in love with your new Apple device, return it in its original packaging.
+- 🔄 **30-Day Easy Returns:** No restocking fees. If you're not completely in love with your new device, return it in its original packaging.
 
 How can I help you find your next device today?`;
     }
 
-    // 3. COMPARISON REQUESTS (e.g. iPhone 16 Pro vs iPhone 15 Pro, M3 vs M4, comparison tables)
+    // 3. COMPARISON REQUESTS (e.g. specs vs specs, difference, compare)
     else if (
       normalizedQuery.includes("compare") ||
       normalizedQuery.includes(" versus ") ||
@@ -189,54 +181,54 @@ Here is a side-by-side spec comparison to help you choose between these two incr
 | **Category** | ${p1.category} | ${p2.category} |
 | **Release Year** | ${p1.release_year} | ${p2.release_year} |
 | **Starting Price** | **$${p1.specs.starting_price}** | **$${p2.specs.starting_price}** |
-| **Processor Chip** | \`${p1.specs.processor_chip}\` | \`${p2.specs.processor_chip}\` |
-| **Screen Size** | ${p1.specs.screen_size} | ${p2.specs.screen_size} |
-| **Storage Options** | ${p1.specs.storage_capacities.join(", ")} | ${p2.specs.storage_capacities.join(", ")} |
-| **Colors** | ${p1.colors.map(c => c.color).join(", ")} | ${p2.colors.map(c => c.color).join(", ")} |
+| **Processor/Spec** | \`${p1.specs.processor_chip || 'N/A'}\` | \`${p2.specs.processor_chip || 'N/A'}\` |
+| **Display/Size** | ${p1.specs.screen_size || 'N/A'} | ${p2.specs.screen_size || 'N/A'} |
+| **Storage Options** | ${p1.specs.storage_capacities ? p1.specs.storage_capacities.join(", ") : 'N/A'} | ${p2.specs.storage_capacities ? p2.specs.storage_capacities.join(", ") : 'N/A'} |
+| **Colors** | ${p1.colors ? p1.colors.map(c => c.color).join(", ") : 'N/A'} | ${p2.colors ? p2.colors.map(c => c.color).join(", ") : 'N/A'} |
 
 #### 💡 Expert Verdict & Recommendations:
-- If you're looking for **newer features** and top-tier **future-proofing**, the **[${p1.name}](/product/${getSlug(p1.name)})** featuring the **${p1.specs.processor_chip}** chip is a spectacular investment.
+- If you're looking for **newer features** and top-tier **future-proofing**, the **[${p1.name}](/product/${getSlug(p1.name)})** featuring the **${p1.specs.processor_chip || 'advanced design'}** is a spectacular investment.
 - If you're seeking **incredible value** while maintaining pro-grade capability, the **[${p2.name}](/product/${getSlug(p2.name)})** represents a highly smart, cost-effective option.
 
 Both models qualify for our **free premium shipping** and **1-year comprehensive warranty**! Which color way has caught your eye?`;
       } 
       
       // Category comparisons if we couldn't resolve exactly two distinct products
-      else if (normalizedQuery.includes("iphone") || normalizedQuery.includes("phone")) {
-        reply = `### 📱 iPhone Series Spec Comparison
-
-If you're deciding on a new iPhone, here is a quick breakdown of our flagship **iPhone 16 Series** options:
-
-| Model | Screen Size | Chip | Pro Camera System | Price |
-| :--- | :--- | :--- | :--- | :--- |
-| **[iPhone 16 Pro Max](/product/iphone-16-pro-max)** | 6.9" | A18 Pro | 5x Telephoto + Control | From $1,199 |
-| **[iPhone 16 Pro](/product/iphone-16-pro)** | 6.3" | A18 Pro | 5x Telephoto + Control | From $999 |
-| **[iPhone 16 Plus](/product/iphone-16-plus)** | 6.7" | A18 | Standard + Wide Angle | From $899 |
-| **[iPhone 16](/product/iphone-16)** | 6.1" | A18 | Standard + Wide Angle | From $799 |
-
-*All models feature the brand new dynamic physical **Camera Control** button and qualify for free signature shipping.*
-
-Would you like details on a specific iPhone model?`;
-      } 
-      
-      else if (normalizedQuery.includes("macbook") || normalizedQuery.includes("laptop") || normalizedQuery.includes("m3") || normalizedQuery.includes("m4")) {
-        reply = `### 💻 MacBook Pro vs MacBook Air Comparison
-
-To help you decide between raw pro performance and ultra-light portability:
-
-| Laptop Type | Key Advantages | Chip Configs | Starting Price | Best For |
-| :--- | :--- | :--- | :--- | :--- |
-| **[MacBook Pro Series](/product/macbook-pro-14-inch-m4-m4-pro-m4-max)** | Liquid Retina XDR, active cooling, maximum ports | M4, M4 Pro, M4 Max | From $1,599 | Coding, video editing, 3D rendering |
-| **[MacBook Air Series](/product/macbook-air-13-inch-m3)** | Ultra-thin fanless design, lightweight, all-day battery | M3, M2 | From $1,099 | Students, standard office work, travel |
-
-Which workflow are you planning to power with your new MacBook?`;
-      }
-      
       else {
-        reply = `I can definitely help you compare our products! What specific items are you comparing? For example, you can ask me to:
-- "Compare iPhone 16 Pro vs iPhone 15 Pro"
-- "What's the difference between AirPods Pro 2 and AirPods 4?"
-- "Compare MacBook Pro and MacBook Air"`;
+        // Find if a category was mentioned
+        const categories = Array.from(new Set(productsList.map(p => p.category)));
+        const matchedCategory = categories.find(cat => normalizedQuery.includes(cat.toLowerCase()));
+        
+        if (matchedCategory) {
+          const categoryProducts = productsList.filter(p => p.category === matchedCategory).slice(0, 4);
+          if (categoryProducts.length > 0) {
+            reply = `### 📊 ${matchedCategory} Spec Comparison\n\n`;
+            reply += `Here is a side-by-side comparison of our available **${matchedCategory}** products:\n\n`;
+            
+            // Build markdown table dynamically
+            reply += `| Model | Processor / Spec | Starting Price | Release Year |\n`;
+            reply += `| :--- | :--- | :--- | :--- |\n`;
+            for (const p of categoryProducts) {
+              reply += `| **[${p.name}](/product/${getSlug(p.name)})** | ${p.specs.processor_chip || 'N/A'} | $${p.specs.starting_price} | ${p.release_year} |\n`;
+            }
+            
+            reply += `\nWould you like details on any specific model?`;
+          } else {
+            reply = `We carry premium products in the **${matchedCategory}** category. Please check our storefront to see our current inventory.`;
+          }
+        } else {
+          // If no categories matched, check if we have any products to suggest comparing
+          const sampleProducts = productsList.slice(0, 3);
+          if (sampleProducts.length >= 2) {
+            reply = `I can definitely help you compare our products! What specific items are you comparing? For example, you can ask me to:\n`;
+            reply += `- "Compare ${sampleProducts[0].name} vs ${sampleProducts[1].name}"\n`;
+            if (sampleProducts[2]) {
+              reply += `- "What's the difference between ${sampleProducts[1].name} and ${sampleProducts[2].name}?"\n`;
+            }
+          } else {
+            reply = `I can definitely help you compare our products! What specific items are you looking to compare today?`;
+          }
+        }
       }
     }
 
@@ -249,58 +241,24 @@ Which workflow are you planning to power with your new MacBook?`;
       normalizedQuery.includes("how much") ||
       normalizedQuery.includes("price")
     ) {
-      // Check if they want specific category budget
-      if (normalizedQuery.includes("audio") || normalizedQuery.includes("airpods") || normalizedQuery.includes("beats") || normalizedQuery.includes("headphone") || normalizedQuery.includes("earbud")) {
-        const audioItems = productsList.filter(p => p.category === "Earbuds" || p.category === "Headphones")
-          .sort((a, b) => a.specs.starting_price - b.specs.starting_price);
+      const sortedByPrice = [...productsList].sort((a, b) => a.specs.starting_price - b.specs.starting_price);
+      
+      if (sortedByPrice.length > 0) {
+        reply = `### 💰 Best Budget & Value Deals at Shopy\n\n`;
+        reply += `If you're looking for outstanding performance at an accessible price point, here are our most value-packed options:\n\n`;
         
-        reply = `### 🎧 Best Budget Audio & Sound Gear
-
-If you're looking for high-quality audio at a fantastic price point, here are our most accessible options:
-
-1. **[AirPods 4](/product/airpods-4)** ($129) - Redesigned open-ear fit, immersive spatial audio, powered by the H2 chip.
-2. **[Beats Studio Buds+](/product/beats-studio-buds-plus)** ($169) - True wireless earbuds with advanced active noise cancellation and a cool transparent colorway option.
-3. **[Beats Solo 4](/product/beats-solo-4)** ($199) - Ultra-comfortable on-ear headphones with custom acoustics and up to 50 hours of battery life.
-
-*All items ship absolutely free and include our full 1-year product warranty.*`;
-      } 
-      
-      else if (normalizedQuery.includes("macbook") || normalizedQuery.includes("laptop") || normalizedQuery.includes("mac")) {
-        const laptops = productsList.filter(p => p.category === "Laptop")
-          .sort((a, b) => a.specs.starting_price - b.specs.starting_price);
-
-        reply = `### 💻 Best Value MacBooks
-
-To get the power of macOS and Apple Silicon at our best price points:
-
-1. **[MacBook Air 13-inch (M3)](/product/macbook-air-13-inch-m3)** ($1,099) - The ultimate ultraportable. Incredible value with the latest M3 processor and fanless silent performance.
-2. **[MacBook Air 15-inch (M3)](/product/macbook-air-15-inch-m3)** ($1,299) - Offers the same ultra-thin design and M3 chip, but with a beautiful, spacious 15.3-inch Liquid Retina display.
-
-Would you like to explore the technical configurations of our MacBook Air line?`;
-      } 
-      
-      else {
-        // General budget items under $1000
-        const budgetIphones = productsList.filter(p => p.category === "Phone" && p.specs.starting_price < 1000)
-          .sort((a, b) => a.specs.starting_price - b.specs.starting_price);
-
-        reply = `### 📱 Outstanding Value Apple Devices Under $1,000
-
-Looking for premium performance without crossing the $1,000 threshold? Here are our highly recommended devices:
-
-#### Phones & Handhelds:
-- **[iPhone 16](/product/iphone-16)** (From $799) - Powered by the all-new A18 chip and physical Camera Control.
-- **[iPhone 15](/product/iphone-15)** (From $799) - Features Dynamic Island, USB-C, and a fantastic 48MP main camera.
-- **[iPhone 16 Plus](/product/iphone-16-plus)** (From $899) - Exceptional battery life and a large 6.7-inch screen.
-- **[iPhone 16 Pro](/product/iphone-16-pro)** (From $999) - Pro titanium chassis, A18 Pro chip, and the advanced 5x zoom camera.
-
-We also offer premium audio options like **[AirPods 4](/product/airpods-4)** starting at just **$129**. 
-
-All orders qualify for **free premium shipping** and a **1-year warranty**. What kind of device fits your budget target?`;
+        const topBudgets = sortedByPrice.slice(0, 3);
+        topBudgets.forEach((p, idx) => {
+          reply += `${idx + 1}. **[${p.name}](/product/${getSlug(p.name)})** ($${p.specs.starting_price}) - ${p.description}\n`;
+        });
+        
+        reply += `\n*All items ship absolutely free and include our full 1-year product warranty. What kind of device fits your budget target?*`;
+      } else {
+        reply = `We offer premium electronics at competitive prices! Every purchase qualifies for **free premium shipping** and a **1-year warranty**. What kind of device fits your budget target?`;
       }
     }
 
-    // 5. SPECIFIC PRODUCT QUERIES (Check if they mentioned a specific product in our inventory)
+    // 5. SPECIFIC PRODUCT QUERIES & CATEGORY DETECTS
     else {
       const matchedProducts = extractMentionedProducts(normalizedQuery, productsList);
       
@@ -316,12 +274,12 @@ The **${product.name}** (${product.release_year}) is a premium ${product.categor
 
 #### ⚙️ Technical Specifications:
 - 💰 **Starting Price:** $${product.specs.starting_price}
-- 🧠 **Processor Chip:** \`${product.specs.processor_chip}\`
-- 🖥️ **Screen Size:** ${product.specs.screen_size}
-- 💾 **Storage Capacities:** ${product.specs.storage_capacities.join(", ")}
+- 🧠 **Processor/Spec Chip:** \`${product.specs.processor_chip || 'N/A'}\`
+- 🖥️ **Display/Size:** ${product.specs.screen_size || 'N/A'}
+- 💾 **Storage/Capacities:** ${product.specs.storage_capacities ? product.specs.storage_capacities.join(", ") : 'N/A'}
 
 #### 🎨 Premium Color Ways:
-${product.colors.map(c => `- **${c.color}**`).join("\n")}
+${product.colors ? product.colors.map(c => `- **${c.color}**`).join("\n") : ''}
 
 ✨ *Every purchase of the **[${product.name}](/product/${slug})** includes **free premium shipping** and our **1-year hardware warranty**.*
 
@@ -329,94 +287,44 @@ ${product.colors.map(c => `- **${c.color}**`).join("\n")}
       } 
       
       // 6. CATEGORY LEVEL BROWSES / DETECT KEYWORDS
-      else if (
-        normalizedQuery.includes("iphone") ||
-        normalizedQuery.includes("phone") ||
-        normalizedQuery.includes("mobile")
-      ) {
-        reply = `### 📱 Explore Our Premium iPhone Lineup
-
-We stock a curated, brand-new selection of high-fidelity iPhones. Select a model to learn more:
-
-- **[iPhone 16 Pro Max](/product/iphone-16-pro-max)** (From $1,199) - 6.9" display, A18 Pro chip, Grade 5 titanium structure.
-- **[iPhone 16 Pro](/product/iphone-16-pro)** (From $999) - 6.3" display, A18 Pro chip, advanced triple-lens camera.
-- **[iPhone 16 Plus](/product/iphone-16-plus)** (From $899) - 6.7" display, A18 chip, stunning pastel and bright colors.
-- **[iPhone 16](/product/iphone-16)** (From $799) - 6.1" display, standard A18 power, Action & Camera Control.
-- **[iPhone 15 Pro Max](/product/iphone-15-pro-max)** (From $1,199) - 6.7" display, A17 Pro chip, premium 5x telephoto zoom.
-
-Which iPhone screen size or features do you prefer?`;
-      } 
-      
-      else if (
-        normalizedQuery.includes("macbook") ||
-        normalizedQuery.includes("laptop") ||
-        normalizedQuery.includes("mac") ||
-        normalizedQuery.includes("computer")
-      ) {
-        reply = `### 💻 Explore Our MacBook Laptops
-
-Unleash your productivity with our catalog of state-of-the-art Apple Silicon laptops:
-
-#### Pro Powerhouses (For developers, creators, & designers):
-- **[MacBook Pro 16-inch (M4)](/product/macbook-pro-16-inch-m4-pro-m4-max)** (From $2,499) - Ultimate performance, massive Liquid Retina XDR screen.
-- **[MacBook Pro 14-inch (M4)](/product/macbook-pro-14-inch-m4-m4-pro-m4-max)** (From $1,599) - The perfect hybrid of extreme performance and 14" ultra-portability.
-
-#### Sleek & Portable (For daily tasks, students, & travel):
-- **[MacBook Air 15-inch (M3)](/product/macbook-air-15-inch-m3)** (From $1,299) - Ultra-thin fanless design with a gorgeous 15.3" screen.
-- **[MacBook Air 13-inch (M3)](/product/macbook-air-13-inch-m3)** (From $1,099) - The light-as-air 13.6" travel powerhouse.
-
-What kind of work or apps do you plan to run on your new MacBook?`;
-      } 
-      
-      else if (
-        normalizedQuery.includes("airpods") ||
-        normalizedQuery.includes("beats") ||
-        normalizedQuery.includes("headphone") ||
-        normalizedQuery.includes("earbud") ||
-        normalizedQuery.includes("audio") ||
-        normalizedQuery.includes("sound") ||
-        normalizedQuery.includes("music")
-      ) {
-        reply = `### 🎧 Explore High-Fidelity Audio Gear
-
-Enhance your sonic experience with our curated premium line of headphones and wireless earbuds:
-
-#### Apple AirPods Series:
-- **[AirPods Max (USB-C)](/product/airpods-max-usb-c)** ($549) - Pure high-fidelity over-ear comfort with advanced Active Noise Cancellation (ANC).
-- **[AirPods Pro 2 (USB-C)](/product/airpods-pro-2-usb-c)** ($249) - True wireless earbuds with best-in-class adaptive ANC and dust resistance.
-- **[AirPods 4 with ANC](/product/airpods-4-with-active-noise-cancellation)** ($179) - Redesigned open-ear design featuring powerful ANC.
-- **[AirPods 4](/product/airpods-4)** ($129) - Redesigned standard open-ear acoustics.
-
-#### Beats Audio Series:
-- **[Beats Studio Pro](/product/beats-studio-pro)** ($349) - Premium over-ear headphones with personalized spatial audio.
-- **[Beats Solo 4](/product/beats-solo-4)** ($199) - On-ear high-fidelity headphones with up to 50 hours of battery life.
-- **[Beats Studio Buds+](/product/beats-studio-buds-plus)** ($169) - True wireless active earbuds with a beautiful transparent model option.
-
-Are you looking for in-ear convenience (earbuds) or over-ear immersion (headphones)?`;
-      } 
-      
-      // 7. KEYWORD SEARCH AS A GENERAL FALLBACK
       else {
-        const matches = findProductsByKeyword(normalizedQuery, productsList);
+        // See if query mentions any category name
+        const categories = Array.from(new Set(productsList.map(p => p.category)));
+        const matchedCategory = categories.find(cat => normalizedQuery.includes(cat.toLowerCase()));
         
-        if (matches.length > 0) {
-          reply = `I found some devices in our catalog that match your interest:
-
-${matches.map((m) => `- **[${m.name}](/product/${getSlug(m.name)})** ($${m.specs.starting_price}) - ${m.description}`).join("\n")}
-
-Would you like more details, specs, or color options for any of these models?`;
-        } 
+        if (matchedCategory) {
+          const categoryProducts = productsList.filter(p => p.category === matchedCategory);
+          reply = `### 📱 Explore Our Premium ${matchedCategory} Lineup\n\n`;
+          reply += `We stock a curated selection of state-of-the-art **${matchedCategory}** products. Select a model to learn more:\n\n`;
+          
+          categoryProducts.slice(0, 5).forEach((p) => {
+            reply += `- **[${p.name}](/product/${getSlug(p.name)})** (From $${p.specs.starting_price}) - ${p.description}\n`;
+          });
+          
+          reply += `\nWhich model or features do you prefer?`;
+        }
         
-        // 8. FINAL ULTIMATE ENGAGING AI SHOP ASSISTANT CONVERSATIONAL REPLY
+        // 7. KEYWORD SEARCH AS A GENERAL FALLBACK
         else {
-          reply = `That sounds like a fascinating question! While I focus on our catalog of premium Apple devices (iPhones, MacBooks, AirPods) and Beats audio gear, I'd love to help you find the perfect match.
+          const matches = findProductsByKeyword(normalizedQuery, productsList);
+          
+          if (matches.length > 0) {
+            reply = `I found some devices in our catalog that match your interest:\n\n`;
+            reply += matches.map((m) => `- **[${m.name}](/product/${getSlug(m.name)})** ($${m.specs.starting_price}) - ${m.description}`).join("\n");
+            reply += `\n\nWould you like more details, specs, or options for any of these models?`;
+          } 
+          
+          // 8. FINAL ULTIMATE ENGAGING AI SHOP ASSISTANT CONVERSATIONAL REPLY
+          else {
+            reply = `That sounds like a fascinating question! I'd love to help you find the perfect match from our catalog of premium electronics and tech gear.
 
 Could you tell me a bit more about:
-- Which category you're interested in (Phones, Laptops, or Sound gear)?
+- Which category you're interested in? ${categories.length > 0 ? `(We carry: ${categories.join(", ")})` : ""}
 - What your budget target is?
-- Any specific features you need (like maximum battery life, pro cameras, or active noise cancellation)?
+- Any specific features you need (like maximum battery life, performance chips, or unique finishes)?
 
 Alternatively, you can ask me to **compare models** or detail any product in our menu!`;
+          }
         }
       }
     }

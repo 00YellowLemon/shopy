@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getSlug, Product, ColorOption } from "../data/products";
+import { getSlug, Product, ColorOption, formatCategoryLabel } from "../data/products";
 import { useCart, getStoragePriceModifier } from "../context/CartContext";
 import Header from "./Header";
 import CartDrawer from "./CartDrawer";
@@ -88,7 +88,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col flex-1 animate-pulse">
-        <Header searchQuery="" setSearchQuery={() => {}} activeCategory="all" setActiveCategory={() => {}} />
+        <Header searchQuery="" setSearchQuery={() => {}} activeCategory="all" setActiveCategory={() => {}} categories={[]} />
         <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 flex-1 space-y-12">
           <div className="h-6 w-1/4 bg-zinc-900 rounded-md animate-pulse" />
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 items-start">
@@ -110,7 +110,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
       <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center">
         <h2 className="text-2xl font-bold mb-4">Product Not Found</h2>
         <p className="text-zinc-400 mb-6 max-w-sm">
-          Sorry, the device you are looking for does not exist in our Apple catalog.
+          Sorry, the product you are looking for does not exist in our catalog.
         </p>
         <Link
           href="/"
@@ -140,15 +140,12 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
   // Deterministically find a recommended accessory
   const getBundleAccessory = (): Product | null => {
     if (productsList.length === 0) return null;
-    let found: Product | undefined;
-    if (product.category === "Phone") {
-      found = productsList.find((p) => p.name === "AirPods Pro 2 (USB-C)") || productsList[18] || productsList[0];
-    } else if (product.category === "Laptop") {
-      found = productsList.find((p) => p.name === "AirPods Max (USB-C)") || productsList[17] || productsList[0];
-    } else {
-      found = productsList.find((p) => p.name === "iPhone 16 Pro Max") || productsList[0];
-    }
-    return found || null;
+    // Find the first product that has a different category than the current product
+    const differentCategoryProduct = productsList.find((p) => p.category !== product.category && p.name !== product.name);
+    if (differentCategoryProduct) return differentCategoryProduct;
+    // Fallback to any other product that is not this product
+    const otherProduct = productsList.find((p) => p.name !== product.name);
+    return otherProduct || productsList[0] || null;
   };
 
   const bundleAccessory = getBundleAccessory();
@@ -171,12 +168,16 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
   )
     .slice(0, 4);
 
-  // If there are fewer than 3 related items, fill up with top headphones/earbuds
+  // If there are fewer than 3 related items, fill up with other top items in the catalog
   if (relatedProducts.length < 3 && productsList.length > 0) {
-    const audioFillers = productsList.filter((p) => (p.category === "Earbuds" || p.category === "Headphones") && p.name !== product.name)
-      .slice(0, 4 - relatedProducts.length);
-    relatedProducts.push(...audioFillers);
+    const fillers = productsList.filter(
+      (p) => p.name !== product.name && !relatedProducts.some((r) => r.name === p.name)
+    ).slice(0, 4 - relatedProducts.length);
+    relatedProducts.push(...fillers);
   }
+
+  // Dynamic Categories list for the header
+  const categoriesList = ["all", ...Array.from(new Set(productsList.map((p) => p.category)))];
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col flex-1">
@@ -189,6 +190,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
           setActiveCategory(cat);
           router.push("/"); // Navigate home if user filters categories from Header
         }}
+        categories={categoriesList}
       />
 
       {/* Main Container */}
@@ -198,7 +200,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
         <nav className="flex items-center gap-1.5 text-xs text-zinc-500 mb-8">
           <Link href="/" className="hover:text-zinc-300 transition-colors">Catalog</Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-zinc-400 capitalize">{product.category}s</span>
+          <span className="text-zinc-400 capitalize">{formatCategoryLabel(product.category)}</span>
           <ChevronRight className="h-3 w-3" />
           <span className="text-zinc-300 line-clamp-1">{product.name}</span>
         </nav>
@@ -242,24 +244,24 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
               </span>
               <div className="flex gap-3 rounded-full border border-zinc-800 bg-zinc-900/40 p-2 backdrop-blur-sm">
                 {product.colors.map((c) => {
-                  let swatchColor = "bg-zinc-800";
-                  const label = c.color.toLowerCase();
-                  if (label.includes("desert")) swatchColor = "bg-[#d4c5b9]";
-                  else if (label.includes("natural")) swatchColor = "bg-[#a6a19a]";
-                  else if (label.includes("white") || label.includes("silver") || label.includes("ivory")) swatchColor = "bg-[#f2f1ed]";
-                  else if (label.includes("black") || label.includes("midnight") || label.includes("matte")) swatchColor = "bg-[#232426]";
-                  else if (label.includes("blue")) swatchColor = "bg-[#547285]";
-                  else if (label.includes("ultramarine")) swatchColor = "bg-[#4352a5]";
-                  else if (label.includes("teal")) swatchColor = "bg-[#3b8790]";
-                  else if (label.includes("pink")) swatchColor = "bg-[#faadb9]";
-                  else if (label.includes("yellow")) swatchColor = "bg-[#fae2a5]";
-                  else if (label.includes("green")) swatchColor = "bg-[#abdca5]";
-                  else if (label.includes("purple")) swatchColor = "bg-[#8b5cf6]";
-                  else if (label.includes("orange")) swatchColor = "bg-[#f97316]";
-                  else if (label.includes("starlight")) swatchColor = "bg-[#f0e8db]";
-                  else if (label.includes("gray")) swatchColor = "bg-[#71717a]";
-                  else if (label.includes("gold")) swatchColor = "bg-[#fbbf24]";
-                  else if (label.includes("transparent")) swatchColor = "bg-zinc-700 border border-zinc-500/50";
+                  const lower = c.color.toLowerCase().trim();
+                  let inlineBg: string | undefined = undefined;
+                  
+                  if (lower.includes("desert") || lower.includes("gold") || lower.includes("sand")) inlineBg = "#d4c5b9";
+                  else if (lower.includes("natural") || lower.includes("silver") || lower.includes("titanium") || lower.includes("gray")) inlineBg = "#a6a19a";
+                  else if (lower.includes("white") || lower.includes("ivory")) inlineBg = "#f2f1ed";
+                  else if (lower.includes("black") || lower.includes("dark") || lower.includes("charcoal") || lower.includes("midnight") || lower.includes("matte")) inlineBg = "#232426";
+                  else if (lower.includes("blue") || lower.includes("ultramarine")) inlineBg = "#2b4c7e";
+                  else if (lower.includes("red")) inlineBg = "#b82e2e";
+                  else if (lower.includes("green") || lower.includes("teal")) inlineBg = "#2e6f40";
+                  else if (lower.includes("pink")) inlineBg = "#ffc0cb";
+                  else if (lower.includes("purple")) inlineBg = "#800080";
+                  else if (lower.includes("yellow")) inlineBg = "#facc15";
+                  else if (lower.includes("starlight")) inlineBg = "#f0e8db";
+                  
+                  if (!inlineBg && /^(#[0-9a-f]{3,8}|[a-z]+)$/i.test(lower)) {
+                    inlineBg = lower;
+                  }
 
                   const isSelected = selectedColor.color === c.color;
 
@@ -267,7 +269,10 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
                     <button
                       key={c.color}
                       onClick={() => setSelectedColor(c)}
-                      className={`h-7 w-7 rounded-full transition-all duration-300 cursor-pointer ${swatchColor} ${
+                      style={{ backgroundColor: inlineBg }}
+                      className={`h-7 w-7 rounded-full transition-all duration-300 cursor-pointer ${
+                        !inlineBg ? "bg-zinc-800" : ""
+                      } ${
                         isSelected 
                           ? "ring-2 ring-purple-500 ring-offset-2 ring-offset-zinc-950 scale-110 shadow-lg shadow-purple-500/20" 
                           : "opacity-80 hover:opacity-100"

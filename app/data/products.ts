@@ -26,4 +26,23 @@ export function getSlug(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+export function formatCategoryLabel(category: string): string {
+  if (!category) return "";
+  const lower = category.toLowerCase().trim();
+  if (lower === "all") return "All Products";
+  if (lower === "phone") return "Phones";
+  if (lower === "laptop") return "Laptops";
+  if (lower === "earbuds") return "Earbuds";
+  if (lower === "headphones") return "Headphones";
+  if (lower === "smartwatch") return "Smartwatches";
+  if (lower === "television" || lower === "tv") return "TVs & Displays";
+  if (lower === "console" || lower === "gaming") return "Gaming Consoles";
+  
+  // Dynamic fallback: capitalize first letter and pluralize if needed
+  const capitalized = category.charAt(0).toUpperCase() + category.slice(1);
+  if (capitalized.toLowerCase().endsWith("s")) return capitalized;
+  return capitalized + "s";
+}
+
+
 

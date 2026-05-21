@@ -260,7 +260,7 @@ export default function CartDrawer() {
                 <div>
                   <h3 className="text-lg font-bold">Processing Order</h3>
                   <p className="mt-2 text-xs text-zinc-400">
-                    Connecting to Apple secure transaction server...
+                    Connecting to Shopy secure transaction server...
                   </p>
                 </div>
               </div>

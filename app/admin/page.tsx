@@ -63,6 +63,7 @@ export default function AdminPage() {
   // Product Form State
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Phone");
+  const [customCategoryText, setCustomCategoryText] = useState("");
   const [releaseYear, setReleaseYear] = useState(new Date().getFullYear());
   const [description, setDescription] = useState("");
   const [startingPrice, setStartingPrice] = useState<number | "">("");
@@ -185,20 +186,20 @@ export default function AdminPage() {
   };
 
   const handleColorNameChange = (index: number, value: string) => {
-    const newColors = [...colors];
-    newColors[index].color = value;
-    setColors(newColors);
+    setColors(colors.map((c, i) => i === index ? { ...c, color: value } : c));
   };
 
   const handleImageFileChange = (index: number, file: File | null) => {
     if (!file) return;
-    const newColors = [...colors];
-    newColors[index].file = file;
-    if (newColors[index].previewUrl && newColors[index].previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(newColors[index].previewUrl);
+    
+    // Revoke old object URL to prevent memory leaks
+    const oldPreview = colors[index].previewUrl;
+    if (oldPreview && oldPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(oldPreview);
     }
-    newColors[index].previewUrl = URL.createObjectURL(file);
-    setColors(newColors);
+    
+    const previewUrl = URL.createObjectURL(file);
+    setColors(colors.map((c, i) => i === index ? { ...c, file, previewUrl } : c));
   };
 
   // Manage Storage Capacity Checkboxes
@@ -218,6 +219,10 @@ export default function AdminPage() {
 
     // Field Validations
     if (!name.trim()) return setErrorMessage("Product Name is required.");
+    const finalCategory = category === "custom" ? customCategoryText.trim() : category;
+    if (category === "custom" && !customCategoryText.trim()) {
+      return setErrorMessage("Please specify a custom category name.");
+    }
     if (!startingPrice || startingPrice <= 0) return setErrorMessage("A valid starting price is required.");
     if (!description.trim()) return setErrorMessage("Product Description is required.");
     if (!screenSize.trim()) return setErrorMessage("Screen Size is required.");
@@ -264,7 +269,7 @@ export default function AdminPage() {
       setUploadProgress("Publishing product to catalog...");
       const finalProduct = {
         name: name.trim(),
-        category,
+        category: finalCategory,
         release_year: Number(releaseYear),
         description: description.trim(),
         specs: {
@@ -289,6 +294,7 @@ export default function AdminPage() {
       setScreenSize("");
       setProcessorChip("");
       setSelectedStorage([]);
+      setCustomCategoryText("");
       setColors([{ color: "", file: null, previewUrl: "" }]);
       
     } catch (err: unknown) {
@@ -541,10 +547,10 @@ export default function AdminPage() {
         <div className="mb-10">
           <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-purple-400" />
-            Launch New Device
+            Launch New Product
           </h2>
           <p className="mt-1.5 text-xs text-zinc-500 max-w-2xl leading-relaxed">
-            Expand the Shopy catalog by creating a new premium Apple device. All media files will be securely loaded to our
+            Expand the Shopy catalog by creating a new premium product. All media files will be securely loaded to our
             Firebase Storage bucket and connected in Firestore.
           </p>
         </div>
@@ -554,7 +560,7 @@ export default function AdminPage() {
           <div className="mb-8 flex items-start gap-3 rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-sm text-green-400 font-medium">
             <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400 mt-0.5 animate-bounce" />
             <div>
-              <p className="font-bold text-white mb-0.5">Device Published Successfully</p>
+              <p className="font-bold text-white mb-0.5">Product Published Successfully</p>
               <p className="text-xs text-zinc-400">{successMessage}</p>
             </div>
           </div>
@@ -564,7 +570,7 @@ export default function AdminPage() {
           <div className="mb-8 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-400 font-medium">
             <AlertTriangle className="h-5 w-5 shrink-0 text-red-400 mt-0.5" />
             <div>
-              <p className="font-bold text-white mb-0.5">Failed to Publish Device</p>
+              <p className="font-bold text-white mb-0.5">Failed to Publish Product</p>
               <p className="text-xs text-zinc-400">{errorMessage}</p>
             </div>
           </div>
@@ -593,7 +599,7 @@ export default function AdminPage() {
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. iPhone 17 Pro Max"
+                      placeholder="e.g. Flagship Ultra Laptop"
                       className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2.5 px-3.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
                       required
                       disabled={submitting}
@@ -613,11 +619,31 @@ export default function AdminPage() {
                       >
                         <option value="Phone" className="bg-zinc-950 text-white">Phone</option>
                         <option value="Laptop" className="bg-zinc-950 text-white">Laptop</option>
-                        <option value="Earbuds" className="bg-zinc-950 text-white">Earbuds</option>
-                        <option value="Headphones" className="bg-zinc-950 text-white">Headphones</option>
+                        <option value="Audio" className="bg-zinc-950 text-white">Audio</option>
+                        <option value="Smartwatch" className="bg-zinc-950 text-white">Smartwatch</option>
+                        <option value="Television" className="bg-zinc-950 text-white">Television</option>
+                        <option value="Smart Home" className="bg-zinc-950 text-white">Smart Home</option>
+                        <option value="Gaming Console" className="bg-zinc-950 text-white">Gaming Console</option>
+                        <option value="custom" className="bg-zinc-950 text-white">Custom Category...</option>
                       </select>
                       <Layers className="absolute right-3.5 top-3 h-4 w-4 text-zinc-500 pointer-events-none" />
                     </div>
+                    {category === "custom" && (
+                      <div className="mt-2.5 space-y-1">
+                        <label className="text-[9px] font-extrabold tracking-widest text-purple-400 uppercase">
+                          Specify Custom Category
+                        </label>
+                        <input
+                          type="text"
+                          value={customCategoryText}
+                          onChange={(e) => setCustomCategoryText(e.target.value)}
+                          placeholder="e.g. Drone, Camera, Projector"
+                          className="w-full rounded-xl border border-purple-500/30 bg-purple-500/5 py-2 px-3 text-xs text-white placeholder-zinc-650 outline-none focus:border-purple-500/50"
+                          required
+                          disabled={submitting}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -788,20 +814,24 @@ export default function AdminPage() {
 
                         {/* File Upload Selector */}
                         <div className="flex-1 flex items-center gap-3">
-                          <label className="flex-1 rounded-xl border border-dashed border-zinc-800 hover:border-zinc-650 bg-zinc-900/20 px-3 py-2 text-center text-xs font-bold text-zinc-400 hover:text-white cursor-pointer transition-all relative flex items-center justify-center gap-1.5 overflow-hidden">
+                          <label
+                            htmlFor={`file-upload-${index}`}
+                            className="flex-1 rounded-xl border border-dashed border-zinc-800 hover:border-zinc-650 bg-zinc-900/20 px-3 py-2 text-center text-xs font-bold text-zinc-400 hover:text-white cursor-pointer transition-all relative flex items-center justify-center gap-1.5 overflow-hidden"
+                          >
                             <Upload className="h-3.5 w-3.5 text-purple-400" />
                             <span className="truncate max-w-[120px]">
                               {item.file ? item.file.name : "Select Image"}
                             </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => handleImageFileChange(index, e.target.files?.[0] || null)}
-                              className="hidden"
-                              required={!item.file}
-                              disabled={submitting}
-                            />
                           </label>
+                          <input
+                            id={`file-upload-${index}`}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleImageFileChange(index, e.target.files?.[0] || null)}
+                            className="sr-only"
+                            required={!item.file}
+                            disabled={submitting}
+                          />
 
                           {/* Image Thumbnail Preview */}
                           <div className="h-10 w-10 shrink-0 rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center">
@@ -863,7 +893,7 @@ export default function AdminPage() {
               </div>
 
               <div className="absolute top-4 right-4 z-10 rounded-full bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 text-[9px] font-bold text-purple-400 uppercase tracking-widest">
-                {category}
+                {category === "custom" ? (customCategoryText || "Custom Category") : category}
               </div>
 
               {/* Product Image Frame */}
@@ -871,8 +901,8 @@ export default function AdminPage() {
                 {colors[0]?.previewUrl ? (
                   <img
                     src={colors[0].previewUrl}
-                    alt={name || "Device"}
-                    className="h-full w-full object-contain transition-all duration-500 group-hover:scale-105"
+                    alt={name || "Product"}
+                    className="h-full w-full object-contain transition-all duration-500 group-hover:scale-[1.03]"
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center text-zinc-700 text-center select-none">
@@ -886,7 +916,7 @@ export default function AdminPage() {
               <div className="space-y-1">
                 <div className="flex items-start justify-between gap-3">
                   <h4 className="text-base font-bold text-white tracking-tight leading-snug truncate max-w-[200px]">
-                    {name || "Apple Device Name"}
+                    {name || "Premium Product Name"}
                   </h4>
                   <div className="text-sm font-extrabold text-white shrink-0">
                     ${startingPrice ? startingPrice.toLocaleString() : "—"}
@@ -902,13 +932,13 @@ export default function AdminPage() {
 
               {/* Description */}
               <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
-                {description || "Provide a custom description to display Apple product specs, premium benefits, and special launch offers."}
+                {description || "Provide a custom description to display product specs, premium benefits, and special launch offers."}
               </p>
 
               {/* Storage Capacities Tag list */}
               <div className="pt-2 border-t border-zinc-900 flex flex-col gap-2">
                 <span className="text-[9px] font-extrabold text-zinc-600 uppercase tracking-widest">
-                  Memory Options
+                  Capacity Options
                 </span>
                 <div className="flex flex-wrap gap-1">
                   {selectedStorage.length > 0 ? (
@@ -954,7 +984,7 @@ export default function AdminPage() {
                   type="button"
                   className="w-full rounded-2xl bg-zinc-900 border border-zinc-800 hover:bg-white text-zinc-300 hover:text-black py-2.5 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>Configure Device</span>
+                  <span>Configure Product</span>
                 </button>
               </div>
 

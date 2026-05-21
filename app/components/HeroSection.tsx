@@ -37,14 +37,35 @@ export default function HeroSection({ products }: { products?: Product[] }) {
     );
   }
 
-  // Find iPhone 16 Pro Max in catalog, fallback to the first loaded item
-  const heroProduct = products.find((p) => p.name === "iPhone 16 Pro Max") || products[0];
+  // Select the top loaded item as flagship
+  const heroProduct = products[0];
   
-  // Local state for active selected color option in Hero (safely fallback to index 0 if not enough colors)
-  const [selectedColor, setSelectedColor] = useState(heroProduct.colors[3] || heroProduct.colors[0]);
+  // Local state for active selected color option in Hero (safely fallback to index 0)
+  const [selectedColor, setSelectedColor] = useState(heroProduct.colors[0]);
 
   const handleAddToCart = () => {
     addToCart(heroProduct, selectedColor, heroProduct.specs.storage_capacities[0] || "256GB"); // default to base storage
+  };
+
+  // Helper to determine if a color string can be used as a CSS background color
+  const getDynamicColorStyle = (colorStr: string) => {
+    const lower = colorStr.toLowerCase().trim();
+    if (lower.includes("desert") || lower.includes("gold") || lower.includes("sand")) return "#d4c5b9";
+    if (lower.includes("natural") || lower.includes("silver") || lower.includes("gray") || lower.includes("titanium")) return "#a6a19a";
+    if (lower.includes("white")) return "#f2f1ed";
+    if (lower.includes("black") || lower.includes("dark") || lower.includes("charcoal")) return "#232426";
+    if (lower.includes("blue")) return "#2b4c7e";
+    if (lower.includes("red")) return "#b82e2e";
+    if (lower.includes("green")) return "#2e6f40";
+    if (lower.includes("pink")) return "#ffc0cb";
+    if (lower.includes("purple")) return "#800080";
+    if (lower.includes("yellow")) return "#facc15";
+    
+    // Check if it's a simple standard CSS color word or hex
+    if (/^(#[0-9a-f]{3,8}|[a-z]+)$/i.test(lower)) {
+      return lower;
+    }
+    return undefined;
   };
 
   return (
@@ -69,28 +90,34 @@ export default function HeroSection({ products }: { products?: Product[] }) {
             <h1 className="mt-6 font-sans text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl">
               <span className="block text-zinc-100">{heroProduct.name}</span>
               <span className="block mt-2 bg-gradient-to-r from-purple-400 via-pink-400 to-amber-300 bg-clip-text text-transparent">
-                Built for Apple Intelligence.
+                Experience Next-Gen Innovation.
               </span>
             </h1>
 
             <p className="mt-6 max-w-xl mx-auto lg:mx-0 text-base leading-relaxed text-zinc-400 sm:text-lg">
-              {heroProduct.description} Fully interactive titanium design housing the massive A18 Pro chip, groundbreaking camera systems, and enhanced battery efficiency.
+              {heroProduct.description}
             </p>
 
             {/* Quick Specs Badges */}
             <div className="mt-8 flex flex-wrap justify-center lg:justify-start gap-3">
-              <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Chip</span>
-                <span className="text-xs font-bold text-zinc-200">{heroProduct.specs.processor_chip}</span>
-              </div>
-              <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Screen</span>
-                <span className="text-xs font-bold text-zinc-200">{heroProduct.specs.screen_size}</span>
-              </div>
-              <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Finish</span>
-                <span className="text-xs font-bold text-zinc-200">{selectedColor.color}</span>
-              </div>
+              {heroProduct.specs.processor_chip && (
+                <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Chip</span>
+                  <span className="text-xs font-bold text-zinc-200">{heroProduct.specs.processor_chip}</span>
+                </div>
+              )}
+              {heroProduct.specs.screen_size && (
+                <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Screen</span>
+                  <span className="text-xs font-bold text-zinc-200">{heroProduct.specs.screen_size}</span>
+                </div>
+              )}
+              {selectedColor?.color && (
+                <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Finish</span>
+                  <span className="text-xs font-bold text-zinc-200">{selectedColor.color}</span>
+                </div>
+              )}
             </div>
 
             {/* CTA Actions */}
@@ -114,7 +141,7 @@ export default function HeroSection({ products }: { products?: Product[] }) {
 
             <div className="mt-6 flex justify-center lg:justify-start items-center gap-2 text-xs text-zinc-500">
               <ShieldCheck className="h-4 w-4 text-green-500" />
-              Free shipping and 1-year official Apple Warranty included
+              Free shipping and 1-year official warranty included
             </div>
           </div>
 
@@ -127,47 +154,48 @@ export default function HeroSection({ products }: { products?: Product[] }) {
             {/* Main Interactive Product Image */}
             <div className="relative z-10 h-[320px] w-[320px] sm:h-[400px] sm:w-[400px] transition-all duration-500 ease-out transform hover:scale-[1.03]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={selectedColor.image_url}
-                alt={`${heroProduct.name} in ${selectedColor.color}`}
-                className="h-full w-full object-contain filter drop-shadow-[0_20px_50px_rgba(0,0,0,0.8)]"
-                onError={(e) => {
-                  // Fallback for image loading error
-                  const target = e.currentTarget;
-                  target.src = "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=600&q=80";
-                }}
-              />
+              {selectedColor?.image_url && (
+                <img
+                  src={selectedColor.image_url}
+                  alt={`${heroProduct.name} in ${selectedColor.color}`}
+                  className="h-full w-full object-contain filter drop-shadow-[0_20px_50px_rgba(0,0,0,0.8)]"
+                  onError={(e) => {
+                    // Fallback for image loading error
+                    const target = e.currentTarget;
+                    target.src = "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=600&q=80";
+                  }}
+                />
+              )}
             </div>
 
             {/* Color Swatch Circle Selectors */}
-            <div className="mt-8 relative z-10 flex items-center gap-4 rounded-full border border-zinc-800 bg-zinc-900/60 p-2.5 backdrop-blur-sm">
-              <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold px-2">Colors</span>
-              <div className="flex gap-2.5">
-                {heroProduct.colors.map((c) => {
-                  // Mappings for color circles using tailwind CSS inline styles or variables
-                  let colorClass = "bg-zinc-800";
-                  if (c.color.includes("Desert")) colorClass = "bg-[#d4c5b9]"; // warm sand titanium
-                  else if (c.color.includes("Natural")) colorClass = "bg-[#a6a19a]"; // steel titanium
-                  else if (c.color.includes("White")) colorClass = "bg-[#f2f1ed]"; // pure white
-                  else if (c.color.includes("Black")) colorClass = "bg-[#232426]"; // charcoal black
+            {heroProduct.colors && heroProduct.colors.length > 0 && (
+              <div className="mt-8 relative z-10 flex items-center gap-4 rounded-full border border-zinc-800 bg-zinc-900/60 p-2.5 backdrop-blur-sm">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold px-2">Colors</span>
+                <div className="flex gap-2.5">
+                  {heroProduct.colors.map((c) => {
+                    const bgColorHex = getDynamicColorStyle(c.color);
+                    const isSelected = selectedColor?.color === c.color;
 
-                  const isSelected = selectedColor.color === c.color;
-
-                  return (
-                    <button
-                      key={c.color}
-                      onClick={() => setSelectedColor(c)}
-                      className={`h-6 w-6 rounded-full cursor-pointer transition-all duration-300 hover:scale-110 relative ${colorClass} ${
-                        isSelected 
-                          ? "ring-2 ring-purple-500 ring-offset-2 ring-offset-zinc-950 scale-110 shadow-lg shadow-purple-500/20" 
-                          : "opacity-80 hover:opacity-100"
-                      }`}
-                      title={c.color}
-                    />
-                  );
-                })}
+                    return (
+                      <button
+                        key={c.color}
+                        onClick={() => setSelectedColor(c)}
+                        style={{ backgroundColor: bgColorHex }}
+                        className={`h-6 w-6 rounded-full cursor-pointer transition-all duration-300 hover:scale-110 relative ${
+                          !bgColorHex ? "bg-zinc-800" : ""
+                        } ${
+                          isSelected 
+                            ? "ring-2 ring-purple-500 ring-offset-2 ring-offset-zinc-950 scale-110 shadow-lg shadow-purple-500/20" 
+                            : "opacity-80 hover:opacity-100"
+                        }`}
+                        title={c.color}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
 

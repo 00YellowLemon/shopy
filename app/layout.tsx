@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Shopy - Premium Apple E-Commerce",
-  description: "Experience the ultimate collection of Apple products with interactive configurations and persistent cart checkouts.",
+  title: "Shopy - Premium Electronics & Tech E-Commerce",
+  description: "Experience the ultimate collection of premium electronics with interactive configurations and persistent cart checkouts.",
 };
 
 export default function RootLayout({

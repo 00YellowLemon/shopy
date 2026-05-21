@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Product, ColorOption, getSlug } from "../data/products";
+import { Product, ColorOption, getSlug, formatCategoryLabel } from "../data/products";
 import { useCart } from "../context/CartContext";
 import { ShoppingCart, Star, Calendar } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -45,7 +45,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       {/* Product Category Tag & Year */}
       <div className="absolute top-4 left-4 z-10 flex items-center gap-1.5">
         <span className="rounded-full bg-zinc-950/80 px-2.5 py-1 text-[10px] font-bold text-zinc-300 backdrop-blur-sm border border-zinc-800">
-          {product.category}
+          {formatCategoryLabel(product.category)}
         </span>
         <span className="flex items-center gap-1 rounded-full bg-zinc-950/80 px-2.5 py-1 text-[10px] font-medium text-zinc-400 backdrop-blur-sm border border-zinc-800">
           <Calendar className="h-3 w-3 text-zinc-500" />
@@ -101,24 +101,24 @@ export default function ProductCard({ product }: ProductCardProps) {
           <div className="flex gap-1.5">
             {product.colors.slice(0, 4).map((c) => {
               // Get swatch bg colors based on names
-              let swatchColor = "bg-zinc-800";
-              const label = c.color.toLowerCase();
-              if (label.includes("desert")) swatchColor = "bg-[#d4c5b9]";
-              else if (label.includes("natural")) swatchColor = "bg-[#a6a19a]";
-              else if (label.includes("white") || label.includes("silver") || label.includes("ivory")) swatchColor = "bg-[#f2f1ed]";
-              else if (label.includes("black") || label.includes("midnight") || label.includes("matte")) swatchColor = "bg-[#232426]";
-              else if (label.includes("blue")) swatchColor = "bg-[#547285]";
-              else if (label.includes("ultramarine")) swatchColor = "bg-[#4352a5]";
-              else if (label.includes("teal")) swatchColor = "bg-[#3b8790]";
-              else if (label.includes("pink")) swatchColor = "bg-[#faadb9]";
-              else if (label.includes("yellow")) swatchColor = "bg-[#fae2a5]";
-              else if (label.includes("green")) swatchColor = "bg-[#abdca5]";
-              else if (label.includes("purple")) swatchColor = "bg-[#8b5cf6]";
-              else if (label.includes("orange")) swatchColor = "bg-[#f97316]";
-              else if (label.includes("starlight")) swatchColor = "bg-[#f0e8db]";
-              else if (label.includes("gray")) swatchColor = "bg-[#71717a]";
-              else if (label.includes("gold")) swatchColor = "bg-[#fbbf24]";
-              else if (label.includes("transparent")) swatchColor = "bg-zinc-700 border border-zinc-500/50";
+              const lower = c.color.toLowerCase().trim();
+              let inlineBg: string | undefined = undefined;
+              
+              if (lower.includes("desert") || lower.includes("gold") || lower.includes("sand")) inlineBg = "#d4c5b9";
+              else if (lower.includes("natural") || lower.includes("silver") || lower.includes("titanium") || lower.includes("gray")) inlineBg = "#a6a19a";
+              else if (lower.includes("white") || lower.includes("ivory")) inlineBg = "#f2f1ed";
+              else if (lower.includes("black") || lower.includes("dark") || lower.includes("charcoal") || lower.includes("midnight") || lower.includes("matte")) inlineBg = "#232426";
+              else if (lower.includes("blue") || lower.includes("ultramarine")) inlineBg = "#2b4c7e";
+              else if (lower.includes("red")) inlineBg = "#b82e2e";
+              else if (lower.includes("green") || lower.includes("teal")) inlineBg = "#2e6f40";
+              else if (lower.includes("pink")) inlineBg = "#ffc0cb";
+              else if (lower.includes("purple")) inlineBg = "#800080";
+              else if (lower.includes("yellow")) inlineBg = "#facc15";
+              else if (lower.includes("starlight")) inlineBg = "#f0e8db";
+              
+              if (!inlineBg && /^(#[0-9a-f]{3,8}|[a-z]+)$/i.test(lower)) {
+                inlineBg = lower;
+              }
 
               const isSelected = selectedColor.color === c.color;
 
@@ -126,7 +126,10 @@ export default function ProductCard({ product }: ProductCardProps) {
                 <button
                   key={c.color}
                   onClick={() => setSelectedColor(c)}
-                  className={`h-4.5 w-4.5 rounded-full transition-all duration-200 cursor-pointer ${swatchColor} ${
+                  style={{ backgroundColor: inlineBg }}
+                  className={`h-4.5 w-4.5 rounded-full transition-all duration-200 cursor-pointer ${
+                    !inlineBg ? "bg-zinc-800" : ""
+                  } ${
                     isSelected 
                       ? "ring-1.5 ring-purple-500 ring-offset-1.5 ring-offset-zinc-950 scale-110" 
                       : "opacity-75 hover:opacity-100"

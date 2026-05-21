@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useCart } from "../context/CartContext";
+import { formatCategoryLabel } from "../data/products";
 import { ShoppingBag, Search, Sparkles, Lock } from "lucide-react";
 
 interface HeaderProps {
@@ -10,6 +11,7 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   activeCategory: string;
   setActiveCategory: (category: string) => void;
+  categories: string[];
 }
 
 export default function Header({
@@ -17,15 +19,14 @@ export default function Header({
   setSearchQuery,
   activeCategory,
   setActiveCategory,
+  categories,
 }: HeaderProps) {
   const { cartCount, setIsCartOpen } = useCart();
 
-  const navItems = [
-    { label: "All Products", id: "all" },
-    { label: "Phones", id: "Phone" },
-    { label: "Laptops", id: "Laptop" },
-    { label: "Audio", id: "audio-combined" }, // combined category for earbuds & headphones
-  ];
+  const navItems = categories.map((cat) => ({
+    label: cat === "all" ? "All Products" : formatCategoryLabel(cat),
+    id: cat,
+  }));
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/75 backdrop-blur-md transition-all duration-300">
@@ -50,21 +51,12 @@ export default function Header({
         {/* Categories Navigation */}
         <nav className="hidden md:flex items-center gap-1">
           {navItems.map((item) => {
-            const isActive =
-              item.id === "audio-combined"
-                ? activeCategory === "Earbuds" || activeCategory === "Headphones"
-                : activeCategory === item.id;
+            const isActive = activeCategory === item.id;
 
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  if (item.id === "audio-combined") {
-                    setActiveCategory("Earbuds"); // Default to Earbuds, logic in page will filter both Earbuds & Headphones
-                  } else {
-                    setActiveCategory(item.id);
-                  }
-                }}
+                onClick={() => setActiveCategory(item.id)}
                 className={`relative rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? "text-white bg-zinc-800/80 shadow-sm"
