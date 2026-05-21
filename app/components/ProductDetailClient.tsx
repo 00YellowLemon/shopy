@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { PRODUCTS, getSlug, Product, ColorOption } from "../data/products";
+import React, { useState, useEffect } from "react";
+import { getSlug, Product, ColorOption } from "../data/products";
 import { useCart, getStoragePriceModifier } from "../context/CartContext";
 import Header from "./Header";
 import CartDrawer from "./CartDrawer";
@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 
 interface ProductDetailClientProps {
   slug: string;
@@ -30,19 +32,78 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
   const { addToCart, setIsCartOpen } = useCart();
   const router = useRouter();
 
-  // Find active product
-  const product = PRODUCTS.find((p) => getSlug(p.name) === slug);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Local state for options
-  const [selectedColor, setSelectedColor] = useState<ColorOption | null>(
-    product ? product.colors[0] : null
-  );
-  const [selectedStorage, setSelectedStorage] = useState<string>(
-    product ? product.specs.storage_capacities[0] || "N/A" : "N/A"
-  );
+  const [selectedColor, setSelectedColor] = useState<ColorOption | null>(null);
+  const [selectedStorage, setSelectedStorage] = useState<string>("N/A");
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
+
+  useEffect(() => {
+    async function fetchProduct() {
+      setLoading(true);
+      try {
+        const docRef = doc(db, "products", slug);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const activeProduct = docSnap.data() as Product;
+          setProduct(activeProduct);
+          setSelectedColor(activeProduct.colors[0]);
+          setSelectedStorage(activeProduct.specs.storage_capacities[0] || "N/A");
+        } else {
+          setProduct(null);
+        }
+      } catch (err) {
+        console.error("Error loading product from Firestore:", err);
+        setProduct(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchProduct();
+  }, [slug]);
+
+  useEffect(() => {
+    async function fetchAll() {
+      try {
+        const querySnapshot = await getDocs(collection(db, "products"));
+        const list: Product[] = [];
+        querySnapshot.forEach((doc) => {
+          list.push(doc.data() as Product);
+        });
+        if (list.length > 0) {
+          setProductsList(list);
+        }
+      } catch (err) {
+        console.error("Error fetching recommended products:", err);
+      }
+    }
+    fetchAll();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col flex-1 animate-pulse">
+        <Header searchQuery="" setSearchQuery={() => {}} activeCategory="all" setActiveCategory={() => {}} />
+        <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 flex-1 space-y-12">
+          <div className="h-6 w-1/4 bg-zinc-900 rounded-md animate-pulse" />
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 items-start">
+            <div className="lg:col-span-7 h-96 bg-zinc-900/40 rounded-3xl animate-pulse" />
+            <div className="lg:col-span-5 space-y-6">
+              <div className="h-8 bg-zinc-900 rounded-md w-3/4 animate-pulse" />
+              <div className="h-4 bg-zinc-900 rounded-md w-1/2 animate-pulse" />
+              <div className="h-24 bg-zinc-900/30 rounded-2xl animate-pulse" />
+              <div className="h-12 bg-zinc-900/30 rounded-full animate-pulse" />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!product || !selectedColor) {
     return (
@@ -77,21 +138,27 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
 
   // 1. AMAZON-STYLE RECOMMENDATION: "Frequently Bought Together" Bundle
   // Deterministically find a recommended accessory
-  let bundleAccessory: Product;
-  if (product.category === "Phone") {
-    bundleAccessory = PRODUCTS.find((p) => p.name === "AirPods Pro 2 (USB-C)") || PRODUCTS[18];
-  } else if (product.category === "Laptop") {
-    bundleAccessory = PRODUCTS.find((p) => p.name === "AirPods Max (USB-C)") || PRODUCTS[17];
-  } else {
-    bundleAccessory = PRODUCTS.find((p) => p.name === "iPhone 16 Pro Max") || PRODUCTS[0];
-  }
+  const getBundleAccessory = (): Product | null => {
+    if (productsList.length === 0) return null;
+    let found: Product | undefined;
+    if (product.category === "Phone") {
+      found = productsList.find((p) => p.name === "AirPods Pro 2 (USB-C)") || productsList[18] || productsList[0];
+    } else if (product.category === "Laptop") {
+      found = productsList.find((p) => p.name === "AirPods Max (USB-C)") || productsList[17] || productsList[0];
+    } else {
+      found = productsList.find((p) => p.name === "iPhone 16 Pro Max") || productsList[0];
+    }
+    return found || null;
+  };
 
-  const bundleAccessoryColor = bundleAccessory.colors[0];
-  const bundleAccessoryStorage = bundleAccessory.specs.storage_capacities[0] || "N/A";
+  const bundleAccessory = getBundleAccessory();
+  const bundleAccessoryColor = bundleAccessory?.colors[0];
+  const bundleAccessoryStorage = bundleAccessory?.specs.storage_capacities[0] || "N/A";
   const bundleDiscount = 20; // $20 bundle savings
-  const bundleTotal = currentPrice + bundleAccessory.specs.starting_price - bundleDiscount;
+  const bundleTotal = bundleAccessory ? (currentPrice + bundleAccessory.specs.starting_price - bundleDiscount) : 0;
 
   const handleAddBundleToCart = () => {
+    if (!bundleAccessory || !bundleAccessoryColor) return;
     // Add both products
     addToCart(product, selectedColor, selectedStorage);
     addToCart(bundleAccessory, bundleAccessoryColor, bundleAccessoryStorage);
@@ -99,14 +166,14 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
   };
 
   // 2. AMAZON-STYLE RECOMMENDATION: "More to Explore" (Related Products)
-  const relatedProducts = PRODUCTS.filter(
+  const relatedProducts = productsList.filter(
     (p) => p.category === product.category && p.name !== product.name
   )
     .slice(0, 4);
 
   // If there are fewer than 3 related items, fill up with top headphones/earbuds
-  if (relatedProducts.length < 3) {
-    const audioFillers = PRODUCTS.filter((p) => p.category === "Earbuds" || p.category === "Headphones")
+  if (relatedProducts.length < 3 && productsList.length > 0) {
+    const audioFillers = productsList.filter((p) => (p.category === "Earbuds" || p.category === "Headphones") && p.name !== product.name)
       .slice(0, 4 - relatedProducts.length);
     relatedProducts.push(...audioFillers);
   }
@@ -341,171 +408,175 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
         </div>
 
         {/* 1. AMAZON-STYLE BANNER: FREQUENTLY BOUGHT TOGETHER */}
-        <section className="rounded-3xl border border-zinc-900 bg-zinc-900/30 p-6 sm:p-8 mb-16 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-transparent opacity-60" />
-          
-          <div className="relative z-10">
-            <h3 className="text-lg font-bold tracking-tight text-white mb-6 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-400" />
-              Frequently Bought Together
-            </h3>
+        {bundleAccessory && bundleAccessoryColor && (
+          <section className="rounded-3xl border border-zinc-900 bg-zinc-900/30 p-6 sm:p-8 mb-16 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-transparent opacity-60" />
+            
+            <div className="relative z-10">
+              <h3 className="text-lg font-bold tracking-tight text-white mb-6 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-purple-400" />
+                Frequently Bought Together
+              </h3>
 
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-              
-              {/* Product Plus Connector Visual */}
-              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 flex-1">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
                 
-                {/* Product 1 */}
-                <div className="flex items-center gap-4 bg-zinc-950 p-3 rounded-2xl border border-zinc-800 w-full sm:w-auto">
-                  <div className="h-16 w-16 flex-shrink-0 flex items-center justify-center p-1 bg-zinc-900/50 rounded-lg">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={selectedColor.image_url}
-                      alt={product.name}
-                      className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
-                    />
+                {/* Product Plus Connector Visual */}
+                <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 flex-1">
+                  
+                  {/* Product 1 */}
+                  <div className="flex items-center gap-4 bg-zinc-950 p-3 rounded-2xl border border-zinc-800 w-full sm:w-auto">
+                    <div className="h-16 w-16 flex-shrink-0 flex items-center justify-center p-1 bg-zinc-900/50 rounded-lg">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={selectedColor.image_url}
+                        alt={product.name}
+                        className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white line-clamp-1 max-w-[140px]">{product.name}</h4>
+                      <span className="text-xs font-extrabold text-zinc-400">${currentPrice}</span>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white line-clamp-1 max-w-[140px]">{product.name}</h4>
-                    <span className="text-xs font-extrabold text-zinc-400">${currentPrice}</span>
+
+                  {/* Plus Operator */}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
+                    <Plus className="h-4 w-4" />
                   </div>
+
+                  {/* Product 2 (Accessory) */}
+                  <div className="flex items-center gap-4 bg-zinc-950 p-3 rounded-2xl border border-zinc-800 w-full sm:w-auto">
+                    <div className="h-16 w-16 flex-shrink-0 flex items-center justify-center p-1 bg-zinc-900/50 rounded-lg">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={bundleAccessoryColor.image_url}
+                        alt={bundleAccessory.name}
+                        className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white line-clamp-1 max-w-[140px]">{bundleAccessory.name}</h4>
+                      <span className="text-xs font-extrabold text-zinc-400">${bundleAccessory.specs.starting_price}</span>
+                    </div>
+                  </div>
+
                 </div>
 
-                {/* Plus Operator */}
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
-                  <Plus className="h-4 w-4" />
+                {/* Bundle Checkout Box */}
+                <div className="rounded-2xl bg-zinc-950/80 p-5 border border-zinc-800 md:min-w-[280px] space-y-4">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-zinc-400">
+                      <span>Bundle Subtotal:</span>
+                      <span className="line-through">${currentPrice + bundleAccessory.specs.starting_price}</span>
+                    </div>
+                    <div className="flex justify-between text-xs font-bold text-green-400">
+                      <span>Bundle Savings:</span>
+                      <span>-${bundleDiscount}</span>
+                    </div>
+                    <div className="border-t border-zinc-850 pt-2 flex justify-between text-sm font-extrabold text-white">
+                      <span>Combo Price:</span>
+                      <span>${bundleTotal}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleAddBundleToCart}
+                    className="w-full flex items-center justify-center gap-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-4 text-xs transition-all duration-300 shadow-md shadow-purple-600/10 cursor-pointer"
+                  >
+                    <ShoppingBag className="h-3.5 w-3.5" />
+                    Add Both to Cart
+                  </button>
                 </div>
 
-                {/* Product 2 (Accessory) */}
-                <div className="flex items-center gap-4 bg-zinc-950 p-3 rounded-2xl border border-zinc-800 w-full sm:w-auto">
-                  <div className="h-16 w-16 flex-shrink-0 flex items-center justify-center p-1 bg-zinc-900/50 rounded-lg">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={bundleAccessoryColor.image_url}
-                      alt={bundleAccessory.name}
-                      className="h-full w-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
-                    />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white line-clamp-1 max-w-[140px]">{bundleAccessory.name}</h4>
-                    <span className="text-xs font-extrabold text-zinc-400">${bundleAccessory.specs.starting_price}</span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Bundle Checkout Box */}
-              <div className="rounded-2xl bg-zinc-950/80 p-5 border border-zinc-800 md:min-w-[280px] space-y-4">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-zinc-400">
-                    <span>Bundle Subtotal:</span>
-                    <span className="line-through">${currentPrice + bundleAccessory.specs.starting_price}</span>
-                  </div>
-                  <div className="flex justify-between text-xs font-bold text-green-400">
-                    <span>Bundle Savings:</span>
-                    <span>-${bundleDiscount}</span>
-                  </div>
-                  <div className="border-t border-zinc-850 pt-2 flex justify-between text-sm font-extrabold text-white">
-                    <span>Combo Price:</span>
-                    <span>${bundleTotal}</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleAddBundleToCart}
-                  className="w-full flex items-center justify-center gap-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-4 text-xs transition-all duration-300 shadow-md shadow-purple-600/10 cursor-pointer"
-                >
-                  <ShoppingBag className="h-3.5 w-3.5" />
-                  Add Both to Cart
-                </button>
               </div>
 
             </div>
-
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* 2. AMAZON-STYLE RECOMMENDATION: RELATED CAROUSEL GRID */}
-        <section className="space-y-6 mb-12">
-          <div className="border-b border-zinc-900 pb-4">
-            <h3 className="text-xl font-bold tracking-tight text-white">
-              Customers Also Viewed
-            </h3>
-            <p className="mt-1 text-xs text-zinc-500">
-              Explore more high-fidelity premium gear recommended for you
-            </p>
-          </div>
+        {relatedProducts.length > 0 && (
+          <section className="space-y-6 mb-12">
+            <div className="border-b border-zinc-900 pb-4">
+              <h3 className="text-xl font-bold tracking-tight text-white">
+                Customers Also Viewed
+              </h3>
+              <p className="mt-1 text-xs text-zinc-500">
+                Explore more high-fidelity premium gear recommended for you
+              </p>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {relatedProducts.map((p) => {
-              const pRating = 4.2 + (p.name.charCodeAt(0) % 8) / 10;
-              const pSlug = getSlug(p.name);
-              
-              return (
-                <div
-                  key={p.name}
-                  className="group relative flex flex-col rounded-2xl border border-zinc-900 bg-zinc-900/20 p-4 transition-all duration-300 hover:border-zinc-800 hover:bg-zinc-900/50 cursor-pointer"
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.closest(".quick-add-action")) {
-                      return;
-                    }
-                    router.push(`/product/${pSlug}`);
-                  }}
-                >
-                  {/* Image wrapper */}
-                  <div className="h-40 flex items-center justify-center p-4 bg-zinc-950/40 rounded-xl mb-4 relative overflow-hidden">
-                    <div className="h-32 w-32 transition-transform duration-500 group-hover:scale-105">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={p.colors[0].image_url}
-                        alt={p.name}
-                        className="h-full w-full object-contain filter drop-shadow-[0_6px_15px_rgba(0,0,0,0.5)]"
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          target.src = "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=200&q=80";
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Title & Star Rating */}
-                  <div className="flex-1 flex flex-col justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-white tracking-tight group-hover:text-purple-400 transition-colors line-clamp-1">
-                        {p.name}
-                      </h4>
-                      
-                      <div className="mt-1 flex items-center gap-1 text-amber-400">
-                        <Star className="h-3 w-3 fill-current" />
-                        <span className="text-[10px] font-bold">{pRating.toFixed(1)}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {relatedProducts.map((p) => {
+                const pRating = 4.2 + (p.name.charCodeAt(0) % 8) / 10;
+                const pSlug = getSlug(p.name);
+                
+                return (
+                  <div
+                    key={p.name}
+                    className="group relative flex flex-col rounded-2xl border border-zinc-900 bg-zinc-900/20 p-4 transition-all duration-300 hover:border-zinc-800 hover:bg-zinc-900/50 cursor-pointer"
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.closest(".quick-add-action")) {
+                        return;
+                      }
+                      router.push(`/product/${pSlug}`);
+                    }}
+                  >
+                    {/* Image wrapper */}
+                    <div className="h-40 flex items-center justify-center p-4 bg-zinc-950/40 rounded-xl mb-4 relative overflow-hidden">
+                      <div className="h-32 w-32 transition-transform duration-500 group-hover:scale-105">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.colors[0].image_url}
+                          alt={p.name}
+                          className="h-full w-full object-contain filter drop-shadow-[0_6px_15px_rgba(0,0,0,0.5)]"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.src = "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=200&q=80";
+                          }}
+                        />
                       </div>
                     </div>
 
-                    {/* Price and Add button */}
-                    <div className="mt-4 pt-3 border-t border-zinc-900/60 flex items-center justify-between">
-                      <span className="text-sm font-extrabold text-white">
-                        ${p.specs.starting_price}
-                      </span>
-                      
-                      <button
-                        onClick={() => {
-                          addToCart(p, p.colors[0], p.specs.storage_capacities[0] || "N/A");
-                        }}
-                        className="quick-add-action flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 hover:bg-white text-zinc-300 hover:text-black transition-all cursor-pointer"
-                        title="Add to Cart"
-                      >
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                      </button>
+                    {/* Title & Star Rating */}
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-white tracking-tight group-hover:text-purple-400 transition-colors line-clamp-1">
+                          {p.name}
+                        </h4>
+                        
+                        <div className="mt-1 flex items-center gap-1 text-amber-400">
+                          <Star className="h-3 w-3 fill-current" />
+                          <span className="text-[10px] font-bold">{pRating.toFixed(1)}</span>
+                        </div>
+                      </div>
+
+                      {/* Price and Add button */}
+                      <div className="mt-4 pt-3 border-t border-zinc-900/60 flex items-center justify-between">
+                        <span className="text-sm font-extrabold text-white">
+                          ${p.specs.starting_price}
+                        </span>
+                        
+                        <button
+                          onClick={() => {
+                            addToCart(p, p.colors[0], p.specs.storage_capacities[0] || "N/A");
+                          }}
+                          className="quick-add-action flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 hover:bg-white text-zinc-300 hover:text-black transition-all cursor-pointer"
+                          title="Add to Cart"
+                        >
+                          <ShoppingCart className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
                     </div>
 
                   </div>
-
-                </div>
-              );
-            })}
-          </div>
-        </section>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
       </main>
 

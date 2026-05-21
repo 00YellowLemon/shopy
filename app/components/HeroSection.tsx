@@ -2,21 +2,49 @@
 
 import React, { useState } from "react";
 import { useCart } from "../context/CartContext";
-import { PRODUCTS, getSlug } from "../data/products";
+import { getSlug, Product } from "../data/products";
 import { ShoppingCart, ArrowRight, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
 
-export default function HeroSection() {
+export default function HeroSection({ products }: { products?: Product[] }) {
   const { addToCart } = useCart();
   
-  // Find iPhone 16 Pro Max in catalog
-  const heroProduct = PRODUCTS.find((p) => p.name === "iPhone 16 Pro Max") || PRODUCTS[0];
+  // Handle initial loading states beautifully with a skeleton loader
+  if (!products || products.length === 0) {
+    return (
+      <div className="relative overflow-hidden bg-zinc-950 py-16 lg:py-24 border-b border-zinc-900 animate-pulse">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-8 items-center">
+            <div className="lg:col-span-7 space-y-6">
+              <div className="h-5 bg-zinc-900 rounded-full w-28" />
+              <div className="h-16 bg-zinc-900 rounded-2xl w-3/4" />
+              <div className="h-6 bg-zinc-900 rounded-lg w-1/2" />
+              <div className="space-y-3">
+                <div className="h-4 bg-zinc-900 rounded w-full" />
+                <div className="h-4 bg-zinc-900 rounded w-5/6" />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <div className="h-12 bg-zinc-900 rounded-full w-40" />
+                <div className="h-12 bg-zinc-900 rounded-full w-40" />
+              </div>
+            </div>
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="h-80 w-80 rounded-full bg-zinc-900/50" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Find iPhone 16 Pro Max in catalog, fallback to the first loaded item
+  const heroProduct = products.find((p) => p.name === "iPhone 16 Pro Max") || products[0];
   
-  // Local state for active selected color option in Hero
-  const [selectedColor, setSelectedColor] = useState(heroProduct.colors[3]); // Default to Desert Titanium (index 3)
+  // Local state for active selected color option in Hero (safely fallback to index 0 if not enough colors)
+  const [selectedColor, setSelectedColor] = useState(heroProduct.colors[3] || heroProduct.colors[0]);
 
   const handleAddToCart = () => {
-    addToCart(heroProduct, selectedColor, heroProduct.specs.storage_capacities[0]); // default to 256GB base storage
+    addToCart(heroProduct, selectedColor, heroProduct.specs.storage_capacities[0] || "256GB"); // default to base storage
   };
 
   return (

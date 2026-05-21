@@ -1,24 +1,23 @@
 import { NextRequest } from "next/server";
-import { PRODUCTS as LOCAL_PRODUCTS, getSlug, Product } from "../data/products";
+import { getSlug, Product } from "../data/products";
+import { db } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
 
-const PRODUCTS_URL = "https://raw.githubusercontent.com/00YellowLemon/Sales-assistant-eccomerce/apple-products-data-8384851639734225394/apple.json";
-
-// Dynamic retrieval of products to stay in sync with the remote repository source
+// Dynamic retrieval of products strictly from Firestore database
 async function getLiveProducts(): Promise<Product[]> {
   try {
-    const res = await fetch(PRODUCTS_URL, {
-      next: { revalidate: 3600 } // Cache for 1 hour
+    const querySnapshot = await getDocs(collection(db, "products"));
+    const fetchedProducts: Product[] = [];
+    querySnapshot.forEach((doc) => {
+      fetchedProducts.push(doc.data() as Product);
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.products)) {
-        return data.products;
-      }
-    }
+    // Sort items by release_year desc by default so flagship models stay on top
+    fetchedProducts.sort((a, b) => b.release_year - a.release_year);
+    return fetchedProducts;
   } catch (error) {
-    console.error("Failed to fetch live products inside /chat handler, using local fallback:", error);
+    console.error("Failed to fetch live products from Firestore inside /chat handler:", error);
+    return [];
   }
-  return LOCAL_PRODUCTS;
 }
 
 // Helper function to find matching products based on text queries

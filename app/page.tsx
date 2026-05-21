@@ -1,21 +1,46 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Header from "./components/Header";
 import HeroSection from "./components/HeroSection";
 import ProductCard from "./components/ProductCard";
 import CartDrawer from "./components/CartDrawer";
 import AssistantDrawer from "./components/AssistantDrawer";
-import { PRODUCTS } from "./data/products";
+import { Product } from "./data/products";
 import { Sparkles, SlidersHorizontal, ArrowUpDown } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 export default function Home() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [sortBy, setSortBy] = useState<"featured" | "price-low-high" | "price-high-low" | "year">("featured");
 
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        const querySnapshot = await getDocs(collection(db, "products"));
+        const fetchedProducts: Product[] = [];
+        querySnapshot.forEach((doc) => {
+          fetchedProducts.push(doc.data() as Product);
+        });
+        // Sort items by release_year desc by default so flagship models stay on top
+        fetchedProducts.sort((a, b) => b.release_year - a.release_year);
+        setProducts(fetchedProducts);
+      } catch (err) {
+        console.error("Failed to fetch products from Firestore:", err);
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchProducts();
+  }, []);
+
   // Filtering Logic
-  const filteredProducts = PRODUCTS.filter((product) => {
+  const filteredProducts = products.filter((product) => {
     // 1. Category Filtering
     const matchesCategory =
       activeCategory === "all" ||
@@ -62,7 +87,7 @@ export default function Home() {
       />
 
       {/* Flagship Highlight Hero Section */}
-      {searchQuery === "" && activeCategory === "all" && <HeroSection />}
+      {searchQuery === "" && activeCategory === "all" && <HeroSection products={products} />}
 
       {/* Main Catalog Section */}
       <main className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 flex-1 flex flex-col">
@@ -129,7 +154,23 @@ export default function Home() {
         </div>
 
         {/* Product Cards Catalog Grid */}
-        {sortedProducts.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="animate-pulse flex flex-col rounded-3xl border border-zinc-900 bg-zinc-900/10 p-5 space-y-4">
+                <div className="h-48 rounded-2xl bg-zinc-900/60 w-full animate-pulse" />
+                <div className="space-y-2">
+                  <div className="h-4 bg-zinc-900 rounded-md w-2/3" />
+                  <div className="h-3 bg-zinc-900 rounded-md w-1/2" />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <div className="h-5 bg-zinc-900 rounded-md w-1/4" />
+                  <div className="h-8 w-8 rounded-full bg-zinc-900" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : sortedProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-20 bg-zinc-900/10 border border-dashed border-zinc-800 rounded-3xl my-6 flex-1">
             <SlidersHorizontal className="h-10 w-10 text-zinc-600 mb-4 animate-pulse" />
             <h3 className="text-base font-bold text-white tracking-tight">No products match search criteria</h3>

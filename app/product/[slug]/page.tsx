@@ -1,8 +1,10 @@
 import React from "react";
 import { Metadata } from "next";
-import { PRODUCTS, getSlug } from "@/app/data/products";
+import { Product } from "@/app/data/products";
 import ProductDetailClient from "@/app/components/ProductDetailClient";
 import { notFound } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -11,7 +13,16 @@ interface PageProps {
 // SEO Dynamic Metadata Generation
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const product = PRODUCTS.find((p) => getSlug(p.name) === slug);
+  let product: Product | undefined;
+
+  try {
+    const docSnap = await getDoc(doc(db, "products", slug));
+    if (docSnap.exists()) {
+      product = docSnap.data() as Product;
+    }
+  } catch (e) {
+    console.error("Error fetching product metadata from Firestore:", e);
+  }
 
   if (!product) {
     return {
@@ -50,11 +61,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ProductPage({ params }: PageProps) {
   const { slug } = await params;
 
-  // Verify product exists, otherwise trigger standard 404
-  const productExists = PRODUCTS.some((p) => getSlug(p.name) === slug);
-  if (!productExists) {
+  // Verify product exists in Firestore
+  let exists = false;
+  try {
+    const docSnap = await getDoc(doc(db, "products", slug));
+    exists = docSnap.exists();
+  } catch (e) {
+    console.error("Error checking product in Firestore:", e);
+  }
+
+  if (!exists) {
     notFound();
   }
 
   return <ProductDetailClient slug={slug} />;
 }
+
