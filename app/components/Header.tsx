@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useCart } from "../context/CartContext";
-import { ShoppingBag, Search, Sparkles } from "lucide-react";
+import { ShoppingBag, Search, Sparkles, Lock } from "lucide-react";
 
 interface HeaderProps {
   searchQuery: string;
@@ -89,6 +90,15 @@ export default function Header({
               className="w-full rounded-full border border-zinc-800 bg-zinc-900/50 py-1.5 pl-9 pr-4 text-xs text-white placeholder-zinc-500 shadow-inner outline-none transition-all duration-300 focus:border-purple-500/50 focus:bg-zinc-900 focus:ring-1 focus:ring-purple-500/30"
             />
           </div>
+
+          {/* Admin Link Button */}
+          <Link
+            href="/admin"
+            className="group relative flex h-10 w-10 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900/30 text-zinc-300 transition-all duration-300 hover:border-zinc-750 hover:bg-zinc-900 hover:text-white"
+            aria-label="Admin Panel"
+          >
+            <Lock className="h-4 w-4 transition-transform group-hover:scale-105" />
+          </Link>
 
           {/* Cart Bag Icon Button */}
           <button
