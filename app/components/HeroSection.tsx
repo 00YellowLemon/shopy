@@ -100,13 +100,13 @@ export default function HeroSection({ products }: { products?: Product[] }) {
 
             {/* Quick Specs Badges */}
             <div className="mt-8 flex flex-wrap justify-center lg:justify-start gap-3">
-              {heroProduct.specs.processor_chip && (
+              {heroProduct.specs.processor_chip && heroProduct.specs.processor_chip !== "N/A" && (
                 <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
                   <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Chip</span>
                   <span className="text-xs font-bold text-zinc-200">{heroProduct.specs.processor_chip}</span>
                 </div>
               )}
-              {heroProduct.specs.screen_size && (
+              {heroProduct.specs.screen_size && heroProduct.specs.screen_size !== "N/A" && (
                 <div className="flex items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-2">
                   <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Screen</span>
                   <span className="text-xs font-bold text-zinc-200">{heroProduct.specs.screen_size}</span>

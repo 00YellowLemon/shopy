@@ -326,18 +326,30 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
             </p>
 
             {/* Micro Specs Card Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-2xl border border-zinc-900 bg-zinc-900/30 p-4 space-y-1">
-                <Cpu className="h-5 w-5 text-purple-400 mb-1" />
-                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block">Processor Chip</span>
-                <span className="text-sm font-bold text-white">{product.specs.processor_chip}</span>
+            {((product.specs.processor_chip && product.specs.processor_chip !== "N/A") || 
+              (product.specs.screen_size && product.specs.screen_size !== "N/A")) && (
+              <div className={`grid gap-4 ${
+                (product.specs.processor_chip && product.specs.processor_chip !== "N/A") && 
+                (product.specs.screen_size && product.specs.screen_size !== "N/A") 
+                  ? "grid-cols-2" 
+                  : "grid-cols-1"
+              }`}>
+                {product.specs.processor_chip && product.specs.processor_chip !== "N/A" && (
+                  <div className="rounded-2xl border border-zinc-900 bg-zinc-900/30 p-4 space-y-1">
+                    <Cpu className="h-5 w-5 text-purple-400 mb-1" />
+                    <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block">Processor Chip</span>
+                    <span className="text-sm font-bold text-white">{product.specs.processor_chip}</span>
+                  </div>
+                )}
+                {product.specs.screen_size && product.specs.screen_size !== "N/A" && (
+                  <div className="rounded-2xl border border-zinc-900 bg-zinc-900/30 p-4 space-y-1">
+                    <Smartphone className="h-5 w-5 text-pink-400 mb-1" />
+                    <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block">Display Size</span>
+                    <span className="text-sm font-bold text-white">{product.specs.screen_size}</span>
+                  </div>
+                )}
               </div>
-              <div className="rounded-2xl border border-zinc-900 bg-zinc-900/30 p-4 space-y-1">
-                <Smartphone className="h-5 w-5 text-pink-400 mb-1" />
-                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block">Display Size</span>
-                <span className="text-sm font-bold text-white">{product.specs.screen_size}</span>
-              </div>
-            </div>
+            )}
 
             {/* Capacity Upgrade Selector */}
             {product.specs.storage_capacities[0] !== "N/A" && (

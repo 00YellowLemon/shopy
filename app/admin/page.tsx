@@ -12,7 +12,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   Lock,
@@ -37,6 +37,8 @@ import {
   Edit,
   Search,
   Package,
+  Square,
+  CheckSquare,
 } from "lucide-react";
 import { Product } from "@/app/data/products";
 
@@ -71,6 +73,12 @@ export default function AdminPage() {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [editingProductSlug, setEditingProductSlug] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
+
+  // Reset selection on tab change or search query change
+  useEffect(() => {
+    setSelectedSlugs([]);
+  }, [activeTab, catalogSearchQuery]);
 
   // Filtered products for catalog search
   const filteredCatalogProducts = products.filter((p) => {
@@ -91,6 +99,9 @@ export default function AdminPage() {
   const [colors, setColors] = useState<ColorInput[]>([
     { color: "", file: null, previewUrl: "" },
   ]);
+
+  const finalCategory = category === "custom" ? customCategoryText.trim() : category;
+  const isPhoneOrLaptop = ["phone", "laptop"].includes(finalCategory.toLowerCase());
 
   // Submission / Status States
   const [submitting, setSubmitting] = useState(false);
@@ -156,11 +167,71 @@ export default function AdminPage() {
       setSuccessMessage("");
       await deleteDoc(doc(db, "products", slug));
       setSuccessMessage(`"${productName}" has been successfully deleted from the catalog.`);
+      setSelectedSlugs((prev) => prev.filter((s) => s !== slug));
       fetchCatalogProducts();
     } catch (err: unknown) {
       const error = err as { message?: string };
       console.error("Deletion error:", error);
       setErrorMessage(error.message || "Failed to delete the product. Please try again.");
+    }
+  };
+
+  const handleToggleSelect = (slug: string) => {
+    setSelectedSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    const visibleSlugs = filteredCatalogProducts.map((p) => p.slug || getSlug(p.name));
+    const allVisibleSelected = visibleSlugs.every((slug) => selectedSlugs.includes(slug));
+
+    if (allVisibleSelected) {
+      setSelectedSlugs((prev) => prev.filter((slug) => !visibleSlugs.includes(slug)));
+    } else {
+      setSelectedSlugs((prev) => {
+        const next = [...prev];
+        visibleSlugs.forEach((slug) => {
+          if (!next.includes(slug)) {
+            next.push(slug);
+          }
+        });
+        return next;
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedSlugs.length === 0) return;
+    
+    if (
+      !window.confirm(
+        `Are you sure you want to delete the ${selectedSlugs.length} selected products? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setLoadingProducts(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    
+    try {
+      const batch = writeBatch(db);
+      selectedSlugs.forEach((slug) => {
+        batch.delete(doc(db, "products", slug));
+      });
+      await batch.commit();
+      
+      setSuccessMessage(`Successfully deleted ${selectedSlugs.length} products.`);
+      setSelectedSlugs([]);
+      fetchCatalogProducts();
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      console.error("Bulk deletion error:", error);
+      setErrorMessage(error.message || "Failed to delete the selected products. Please try again.");
+    } finally {
+      setLoadingProducts(false);
     }
   };
 
@@ -324,7 +395,6 @@ export default function AdminPage() {
       setSelectedStorage([...selectedStorage, capacity]);
     }
   };
-
   // Form Submission
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -339,11 +409,8 @@ export default function AdminPage() {
     }
     if (!startingPrice || startingPrice <= 0) return setErrorMessage("A valid starting price is required.");
     if (!description.trim()) return setErrorMessage("Product Description is required.");
-    if (!screenSize.trim()) return setErrorMessage("Screen Size is required.");
-    if (!processorChip.trim()) return setErrorMessage("Processor Chip is required.");
-    if (selectedStorage.length === 0) return setErrorMessage("Please select at least one Storage Capacity.");
-    if (colors.length === 0 || colors.some((c) => !c.color.trim() || (!c.file && !c.imageUrl))) {
-      return setErrorMessage("Please add at least one color option and upload or retain an image for it.");
+    if (colors.length === 0 || colors.some((c) => !c.file && !c.imageUrl)) {
+      return setErrorMessage("Please upload or retain at least one image.");
     }
 
     setSubmitting(true);
@@ -376,13 +443,17 @@ export default function AdminPage() {
       for (let i = 0; i < colors.length; i++) {
         const item = colors[i];
         
+        // Auto-generate name if empty or left blank
+        const finalColorName = item.color.trim() || `Image ${i + 1}`;
+        const sanitizedColorName = finalColorName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        
         if (item.file) {
           // Upload new file
-          setUploadProgress(`Uploading ${item.color} image (${i + 1}/${colors.length})...`);
+          setUploadProgress(`Uploading ${finalColorName} image (${i + 1}/${colors.length})...`);
           
           // Storage path: products/{slug}/{colorName}_{timestamp}
           const fileExtension = item.file.name.split(".").pop() || "png";
-          const storagePath = `products/${slug}/${item.color.toLowerCase().replace(/[^a-z0-9]+/g, "-")}_${Date.now()}.${fileExtension}`;
+          const storagePath = `products/${slug}/${sanitizedColorName}_${Date.now()}.${fileExtension}`;
           const storageRef = ref(storage, storagePath);
           
           // Perform upload
@@ -390,17 +461,17 @@ export default function AdminPage() {
           const downloadUrl = await getDownloadURL(uploadSnapshot.ref);
 
           uploadedColors.push({
-            color: item.color.trim(),
+            color: finalColorName,
             image_url: downloadUrl,
           });
         } else if (item.imageUrl) {
           // Reuse existing image
           uploadedColors.push({
-            color: item.color.trim(),
+            color: finalColorName,
             image_url: item.imageUrl,
           });
         } else {
-          throw new Error(`Color "${item.color}" has no image file or URL.`);
+          throw new Error(`Item ${i + 1} has no image file or URL.`);
         }
       }
 
@@ -409,13 +480,15 @@ export default function AdminPage() {
       const finalProduct = {
         name: name.trim(),
         category: finalCategory,
-        release_year: Number(releaseYear),
+        release_year: Number(releaseYear) || new Date().getFullYear(),
         description: description.trim(),
         specs: {
           starting_price: Number(startingPrice),
-          storage_capacities: selectedStorage,
-          screen_size: screenSize.trim(),
-          processor_chip: processorChip.trim(),
+          storage_capacities: isEditMode && selectedStorage.length > 0 
+            ? selectedStorage 
+            : (selectedStorage.length > 0 ? selectedStorage : ["N/A"]),
+          screen_size: isEditMode && screenSize.trim() ? screenSize.trim() : (screenSize.trim() || "N/A"),
+          processor_chip: isEditMode && processorChip ? processorChip.trim() : (processorChip.trim() || "N/A"),
         },
         colors: uploadedColors,
         slug,
@@ -867,24 +940,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* 2. Release Year */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold tracking-widest text-zinc-400 uppercase">
-                    Release Year
-                  </label>
-                  <input
-                    type="number"
-                    value={releaseYear}
-                    onChange={(e) => setReleaseYear(Number(e.target.value))}
-                    min={2000}
-                    max={2100}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2.5 px-3.5 text-sm text-white outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
-                    required
-                    disabled={submitting}
-                  />
-                </div>
-
-                {/* 3. Description */}
+                {/* 2. Description */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-extrabold tracking-widest text-zinc-400 uppercase">
                     Product Description
@@ -900,95 +956,30 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* 4. Specifications Grid */}
+                {/* 3. Price Specification */}
                 <div className="border-t border-zinc-900/60 pt-5">
-                  <h4 className="text-xs font-extrabold text-purple-400 uppercase tracking-widest mb-4">
-                    Technical Specifications
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {/* Price */}
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-extrabold tracking-widest text-zinc-400 uppercase flex items-center gap-1">
-                        <DollarSign className="h-3 w-3 text-zinc-500" /> Starting Price ($)
-                      </label>
-                      <input
-                        type="number"
-                        value={startingPrice}
-                        onChange={(e) => setStartingPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                        placeholder="e.g. 999"
-                        min={1}
-                        className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2.5 px-3.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
-                        required
-                        disabled={submitting}
-                      />
-                    </div>
-
-                    {/* Screen Size */}
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-extrabold tracking-widest text-zinc-400 uppercase flex items-center gap-1">
-                        <Tv className="h-3 w-3 text-zinc-500" /> Screen Size
-                      </label>
-                      <input
-                        type="text"
-                        value={screenSize}
-                        onChange={(e) => setScreenSize(e.target.value)}
-                        placeholder="e.g. 6.3 inches or N/A"
-                        className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2.5 px-3.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
-                        required
-                        disabled={submitting}
-                      />
-                    </div>
-
-                    {/* Processor */}
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-extrabold tracking-widest text-zinc-400 uppercase flex items-center gap-1">
-                        <Cpu className="h-3 w-3 text-zinc-500" /> Processor Chip
-                      </label>
-                      <input
-                        type="text"
-                        value={processorChip}
-                        onChange={(e) => setProcessorChip(e.target.value)}
-                        placeholder="e.g. A18 Pro"
-                        className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2.5 px-3.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
-                        required
-                        disabled={submitting}
-                      />
-                    </div>
+                  <div className="space-y-1 max-w-xs">
+                    <label className="text-[10px] font-extrabold tracking-widest text-zinc-400 uppercase flex items-center gap-1">
+                      <DollarSign className="h-3.5 w-3.5 text-zinc-500" /> Starting Price ($)
+                    </label>
+                    <input
+                      type="number"
+                      value={startingPrice}
+                      onChange={(e) => setStartingPrice(e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="e.g. 999"
+                      min={1}
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2.5 px-3.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
+                      required
+                      disabled={submitting}
+                    />
                   </div>
                 </div>
 
-                {/* 5. Storage Capacity Checkboxes */}
-                <div className="border-t border-zinc-900/60 pt-5">
-                  <label className="text-[10px] font-extrabold tracking-widest text-zinc-400 uppercase block mb-3">
-                    Available Storage Options
-                  </label>
-                  <div className="flex flex-wrap gap-2.5">
-                    {storagePresets.map((preset) => {
-                      const isSelected = selectedStorage.includes(preset);
-                      return (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => handleStorageCheckboxChange(preset)}
-                          disabled={submitting}
-                          className={`rounded-xl border px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
-                            isSelected
-                              ? "border-purple-500 bg-purple-500/10 text-white shadow shadow-purple-500/10"
-                              : "border-zinc-800 bg-zinc-900/20 text-zinc-400 hover:border-zinc-700 hover:text-white"
-                          }`}
-                        >
-                          {preset}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 6. Dynamic Colors & Image Upload */}
+                {/* 4. Dynamic Product Images */}
                 <div className="border-t border-zinc-900/60 pt-5">
                   <div className="flex items-center justify-between mb-4">
                     <label className="text-[10px] font-extrabold tracking-widest text-zinc-400 uppercase">
-                      Color Specifications & Product Images
+                      Product Images
                     </label>
                     <button
                       type="button"
@@ -1025,9 +1016,8 @@ export default function AdminPage() {
                             type="text"
                             value={item.color}
                             onChange={(e) => handleColorNameChange(index, e.target.value)}
-                            placeholder="e.g. Natural Titanium"
+                            placeholder="Color/Label (optional, e.g. Black)"
                             className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2 px-3 text-xs text-white placeholder-zinc-600 outline-none focus:border-purple-500/50"
-                            required
                             disabled={submitting}
                           />
                         </div>
@@ -1158,11 +1148,31 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="text-[11px] text-zinc-400 font-semibold truncate">
-                  Chip: <span className="text-zinc-300 font-bold">{processorChip || "—"}</span>
-                  <span className="mx-2 font-light text-zinc-700">|</span>
-                  Screen: <span className="text-zinc-300 font-bold">{screenSize || "—"}</span>
-                </div>
+                {isPhoneOrLaptop ? (
+                  <div className="text-[11px] text-zinc-400 font-semibold truncate">
+                    Chip: <span className="text-zinc-300 font-bold">{processorChip || "—"}</span>
+                    <span className="mx-2 font-light text-zinc-700">|</span>
+                    Screen: <span className="text-zinc-300 font-bold">{screenSize || "—"}</span>
+                  </div>
+                ) : (
+                  (!processorChip || processorChip === "N/A") && (!screenSize || screenSize === "N/A") ? null : (
+                    <div className="text-[11px] text-zinc-400 font-semibold truncate">
+                      {processorChip && processorChip !== "N/A" && (
+                        <span>
+                          Chip: <span className="text-zinc-300 font-bold">{processorChip}</span>
+                        </span>
+                      )}
+                      {processorChip && processorChip !== "N/A" && screenSize && screenSize !== "N/A" && (
+                        <span className="mx-2 font-light text-zinc-700">|</span>
+                      )}
+                      {screenSize && screenSize !== "N/A" && (
+                        <span>
+                          Screen: <span className="text-zinc-300 font-bold">{screenSize}</span>
+                        </span>
+                      )}
+                    </div>
+                  )
+                )}
               </div>
 
               {/* Description */}
@@ -1233,20 +1243,78 @@ export default function AdminPage() {
           <div className="space-y-6">
             {/* Search and Filters bar */}
             <div className="glass-panel p-4 rounded-2xl flex flex-col md:flex-row gap-4 justify-between items-center bg-zinc-900/20 border border-zinc-900/80 shadow-md">
-              <div className="relative w-full md:max-w-md">
-                <Search className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
-                <input
-                  type="text"
-                  value={catalogSearchQuery}
-                  onChange={(e) => setCatalogSearchQuery(e.target.value)}
-                  placeholder="Search products by name, category, processor..."
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2 pl-11 pr-4 text-sm text-white placeholder-zinc-500 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
-                />
+              <div className="flex items-center gap-3 w-full md:max-w-md">
+                {/* Select All checkbox button */}
+                {filteredCatalogProducts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-850 bg-zinc-900/20 hover:bg-zinc-900/40 hover:border-zinc-700 text-zinc-400 hover:text-white transition-all cursor-pointer"
+                    title={
+                      filteredCatalogProducts.every((p) => selectedSlugs.includes(p.slug || getSlug(p.name)))
+                        ? "Deselect All"
+                        : "Select All"
+                    }
+                  >
+                    {filteredCatalogProducts.every((p) => selectedSlugs.includes(p.slug || getSlug(p.name))) ? (
+                      <CheckSquare className="h-4 w-4 text-purple-400" />
+                    ) : (
+                      <Square className="h-4 w-4 text-zinc-600 hover:text-zinc-400" />
+                    )}
+                  </button>
+                )}
+                <div className="relative w-full">
+                  <Search className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={catalogSearchQuery}
+                    onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                    placeholder="Search products by name, category, processor..."
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900/40 py-2 pl-11 pr-4 text-sm text-white placeholder-zinc-500 outline-none transition-all focus:border-purple-500/50 focus:bg-zinc-900"
+                  />
+                </div>
               </div>
               <div className="text-xs font-semibold text-zinc-500 self-end md:self-auto shrink-0">
                 Found: <span className="text-white font-bold">{filteredCatalogProducts.length}</span> / {products.length} products
               </div>
             </div>
+
+            {/* Bulk Actions Panel */}
+            {selectedSlugs.length > 0 && (
+              <div className="glass-panel p-4 rounded-2xl bg-purple-950/5 border border-purple-500/20 shadow-lg shadow-purple-500/5 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
+                    <CheckSquare className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-white">
+                      {selectedSlugs.length} {selectedSlugs.length === 1 ? "Product" : "Products"} Selected
+                    </span>
+                    <span className="hidden sm:inline-block ml-2 text-[10px] font-semibold text-zinc-500">
+                      Actions will be applied to selected items
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSlugs([])}
+                    className="flex-1 sm:flex-initial rounded-xl border border-zinc-850 bg-zinc-900/40 hover:bg-zinc-900/70 px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white transition-all cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-red-600/10 hover:bg-red-650 border border-red-500/20 hover:border-red-500 text-red-400 hover:text-white px-4 py-2 text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-95 shadow-md shadow-red-950/20"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete Selected</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {loadingProducts ? (
               <div className="flex flex-col items-center justify-center py-24 bg-zinc-900/10 border border-dashed border-zinc-800 rounded-3xl">
@@ -1281,7 +1349,25 @@ export default function AdminPage() {
                       className="glass-panel p-5 rounded-3xl border border-zinc-900/80 bg-zinc-900/15 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-zinc-800/80 hover:bg-zinc-900/25 transition-all duration-300 relative group/tile"
                     >
                       {/* Product details info (image and texts) */}
-                      <div className="flex items-center gap-4 flex-1">
+                      <div className="flex items-center gap-4 flex-1 w-full min-w-0">
+                        {/* Custom Select Box Checkbox */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSelect(productSlug)}
+                          className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl border transition-all cursor-pointer active:scale-95 hover:border-purple-500/40"
+                          style={{
+                            borderColor: selectedSlugs.includes(productSlug) ? "rgb(168, 85, 247)" : "rgb(39, 39, 42)",
+                            backgroundColor: selectedSlugs.includes(productSlug) ? "rgba(168, 85, 247, 0.1)" : "rgba(24, 24, 27, 0.3)",
+                            boxShadow: selectedSlugs.includes(productSlug) ? "0 0 10px rgba(168, 85, 247, 0.2)" : "none"
+                          }}
+                        >
+                          {selectedSlugs.includes(productSlug) ? (
+                            <CheckSquare className="h-4 w-4 text-purple-400" />
+                          ) : (
+                            <Square className="h-4 w-4 text-zinc-600 hover:text-zinc-400" />
+                          )}
+                        </button>
+
                         {/* Thumbnail image */}
                         <div className="h-16 w-16 shrink-0 rounded-2xl bg-zinc-950 border border-zinc-900 overflow-hidden flex items-center justify-center p-2 relative group-hover/tile:scale-[1.02] transition-transform duration-300">
                           {p.colors[0]?.image_url ? (
@@ -1314,10 +1400,18 @@ export default function AdminPage() {
                           </p>
 
                           <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-2 flex-wrap">
-                            <span>Chip: <strong className="text-zinc-300">{p.specs.processor_chip}</strong></span>
-                            <span className="text-zinc-800">|</span>
-                            <span>Screen: <strong className="text-zinc-300">{p.specs.screen_size}</strong></span>
-                            <span className="text-zinc-800">|</span>
+                            {p.specs.processor_chip && p.specs.processor_chip !== "N/A" && (
+                              <>
+                                <span>Chip: <strong className="text-zinc-300">{p.specs.processor_chip}</strong></span>
+                                <span className="text-zinc-800">|</span>
+                              </>
+                            )}
+                            {p.specs.screen_size && p.specs.screen_size !== "N/A" && (
+                              <>
+                                <span>Screen: <strong className="text-zinc-300">{p.specs.screen_size}</strong></span>
+                                <span className="text-zinc-800">|</span>
+                              </>
+                            )}
                             <span>Colors: <strong className="text-zinc-300">{p.colors.map(c => c.color).join(", ")}</strong></span>
                           </div>
                         </div>
