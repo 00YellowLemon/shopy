@@ -45,5 +45,11 @@ export function formatCategoryLabel(category: string): string {
   return capitalized + "s";
 }
 
+export function formatPrice(priceUSD: number): string {
+  const priceKSh = Math.round(priceUSD * 130);
+  return `KSh ${priceKSh.toLocaleString()}`;
+}
+
+
 
 

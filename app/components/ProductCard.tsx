@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Product, ColorOption, getSlug, formatCategoryLabel } from "../data/products";
+import { Product, ColorOption, getSlug, formatCategoryLabel, formatPrice } from "../data/products";
 import { useCart } from "../context/CartContext";
 import { ShoppingCart, Star, Calendar } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -151,7 +151,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">Starting from</span>
             <span className="text-lg font-extrabold text-white tracking-tight">
-              ${product.specs.starting_price}
+              {formatPrice(product.specs.starting_price)}
             </span>
           </div>
 

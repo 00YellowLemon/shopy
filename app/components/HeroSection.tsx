@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useCart } from "../context/CartContext";
-import { getSlug, Product } from "../data/products";
+import { getSlug, Product, formatPrice } from "../data/products";
 import { ShoppingCart, ArrowRight, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
 
@@ -95,7 +95,9 @@ export default function HeroSection({ products }: { products?: Product[] }) {
             </h1>
 
             <p className="mt-6 max-w-xl mx-auto lg:mx-0 text-base leading-relaxed text-zinc-400 sm:text-lg">
-              {heroProduct.description}
+              {heroProduct.description.length > 160 
+                ? `${heroProduct.description.substring(0, 160).trim()}...` 
+                : heroProduct.description}
             </p>
 
             {/* Quick Specs Badges */}
@@ -127,7 +129,7 @@ export default function HeroSection({ products }: { products?: Product[] }) {
                 className="group flex items-center justify-center gap-2 rounded-full bg-white px-8 py-4 text-sm font-bold text-black transition-all duration-300 hover:bg-zinc-200 hover:scale-102 hover:shadow-lg hover:shadow-white/5 active:scale-98"
               >
                 <ShoppingCart className="h-4 w-4" />
-                Add to Cart • ${heroProduct.specs.starting_price}
+                Add to Cart • {formatPrice(heroProduct.specs.starting_price)}
               </button>
               
               <Link

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getSlug, Product, ColorOption, formatCategoryLabel } from "../data/products";
+import { getSlug, Product, ColorOption, formatCategoryLabel, formatPrice } from "../data/products";
 import { useCart, getStoragePriceModifier } from "../context/CartContext";
 import Header from "./Header";
 import CartDrawer from "./CartDrawer";
@@ -375,7 +375,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
                       >
                         <span className="text-sm font-bold">{cap}</span>
                         <span className="mt-1 text-[10px] font-semibold opacity-75">
-                          ${capPrice}
+                          {formatPrice(capPrice)}
                         </span>
                       </button>
                     );
@@ -390,7 +390,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
                 <div className="flex flex-col">
                   <span className="text-[10px] font-extrabold uppercase text-zinc-500 tracking-wider">Your Price</span>
                   <span className="text-3xl font-extrabold text-white tracking-tight mt-1">
-                    ${currentPrice}
+                    {formatPrice(currentPrice)}
                   </span>
                 </div>
                 <div className="text-xs text-green-400 font-bold bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20 flex items-center gap-1.5">
@@ -452,7 +452,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white line-clamp-1 max-w-[140px]">{product.name}</h4>
-                      <span className="text-xs font-extrabold text-zinc-400">${currentPrice}</span>
+                      <span className="text-xs font-extrabold text-zinc-400">{formatPrice(currentPrice)}</span>
                     </div>
                   </div>
 
@@ -473,7 +473,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white line-clamp-1 max-w-[140px]">{bundleAccessory.name}</h4>
-                      <span className="text-xs font-extrabold text-zinc-400">${bundleAccessory.specs.starting_price}</span>
+                      <span className="text-xs font-extrabold text-zinc-400">{formatPrice(bundleAccessory.specs.starting_price)}</span>
                     </div>
                   </div>
 
@@ -484,15 +484,15 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs text-zinc-400">
                       <span>Bundle Subtotal:</span>
-                      <span className="line-through">${currentPrice + bundleAccessory.specs.starting_price}</span>
+                      <span className="line-through">{formatPrice(currentPrice + bundleAccessory.specs.starting_price)}</span>
                     </div>
                     <div className="flex justify-between text-xs font-bold text-green-400">
                       <span>Bundle Savings:</span>
-                      <span>-${bundleDiscount}</span>
+                      <span>-{formatPrice(bundleDiscount)}</span>
                     </div>
                     <div className="border-t border-zinc-850 pt-2 flex justify-between text-sm font-extrabold text-white">
                       <span>Combo Price:</span>
-                      <span>${bundleTotal}</span>
+                      <span>{formatPrice(bundleTotal)}</span>
                     </div>
                   </div>
 
@@ -572,7 +572,7 @@ export default function ProductDetailClient({ slug }: ProductDetailClientProps) 
                       {/* Price and Add button */}
                       <div className="mt-4 pt-3 border-t border-zinc-900/60 flex items-center justify-between">
                         <span className="text-sm font-extrabold text-white">
-                          ${p.specs.starting_price}
+                          {formatPrice(p.specs.starting_price)}
                         </span>
                         
                         <button

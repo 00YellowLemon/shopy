@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getSlug, Product } from "../data/products";
+import { getSlug, Product, formatPrice } from "../data/products";
 import { db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 
@@ -180,7 +180,7 @@ Here is a side-by-side spec comparison to help you choose between these two incr
 | :--- | :--- | :--- |
 | **Category** | ${p1.category} | ${p2.category} |
 | **Release Year** | ${p1.release_year} | ${p2.release_year} |
-| **Starting Price** | **$${p1.specs.starting_price}** | **$${p2.specs.starting_price}** |
+| **Starting Price** | **${formatPrice(p1.specs.starting_price)}** | **${formatPrice(p2.specs.starting_price)}** |
 | **Processor/Spec** | \`${p1.specs.processor_chip || 'N/A'}\` | \`${p2.specs.processor_chip || 'N/A'}\` |
 | **Display/Size** | ${p1.specs.screen_size || 'N/A'} | ${p2.specs.screen_size || 'N/A'} |
 | **Storage Options** | ${p1.specs.storage_capacities ? p1.specs.storage_capacities.join(", ") : 'N/A'} | ${p2.specs.storage_capacities ? p2.specs.storage_capacities.join(", ") : 'N/A'} |
@@ -209,7 +209,7 @@ Both models qualify for our **free premium shipping** and **1-year comprehensive
             reply += `| Model | Processor / Spec | Starting Price | Release Year |\n`;
             reply += `| :--- | :--- | :--- | :--- |\n`;
             for (const p of categoryProducts) {
-              reply += `| **[${p.name}](/product/${getSlug(p.name)})** | ${p.specs.processor_chip || 'N/A'} | $${p.specs.starting_price} | ${p.release_year} |\n`;
+              reply += `| **[${p.name}](/product/${getSlug(p.name)})** | ${p.specs.processor_chip || 'N/A'} | ${formatPrice(p.specs.starting_price)} | ${p.release_year} |\n`;
             }
             
             reply += `\nWould you like details on any specific model?`;
@@ -249,7 +249,7 @@ Both models qualify for our **free premium shipping** and **1-year comprehensive
         
         const topBudgets = sortedByPrice.slice(0, 3);
         topBudgets.forEach((p, idx) => {
-          reply += `${idx + 1}. **[${p.name}](/product/${getSlug(p.name)})** ($${p.specs.starting_price}) - ${p.description}\n`;
+          reply += `${idx + 1}. **[${p.name}](/product/${getSlug(p.name)})** (${formatPrice(p.specs.starting_price)}) - ${p.description}\n`;
         });
         
         reply += `\n*All items ship absolutely free and include our full 1-year product warranty. What kind of device fits your budget target?*`;
@@ -273,7 +273,7 @@ The **${product.name}** (${product.release_year}) is a premium ${product.categor
 > "${product.description}"
 
 #### ⚙️ Technical Specifications:
-- 💰 **Starting Price:** $${product.specs.starting_price}
+- 💰 **Starting Price:** ${formatPrice(product.specs.starting_price)}
 - 🧠 **Processor/Spec Chip:** \`${product.specs.processor_chip || 'N/A'}\`
 - 🖥️ **Display/Size:** ${product.specs.screen_size || 'N/A'}
 - 💾 **Storage/Capacities:** ${product.specs.storage_capacities ? product.specs.storage_capacities.join(", ") : 'N/A'}
@@ -298,7 +298,7 @@ ${product.colors ? product.colors.map(c => `- **${c.color}**`).join("\n") : ''}
           reply += `We stock a curated selection of state-of-the-art **${matchedCategory}** products. Select a model to learn more:\n\n`;
           
           categoryProducts.slice(0, 5).forEach((p) => {
-            reply += `- **[${p.name}](/product/${getSlug(p.name)})** (From $${p.specs.starting_price}) - ${p.description}\n`;
+            reply += `- **[${p.name}](/product/${getSlug(p.name)})** (From ${formatPrice(p.specs.starting_price)}) - ${p.description}\n`;
           });
           
           reply += `\nWhich model or features do you prefer?`;
@@ -310,7 +310,7 @@ ${product.colors ? product.colors.map(c => `- **${c.color}**`).join("\n") : ''}
           
           if (matches.length > 0) {
             reply = `I found some devices in our catalog that match your interest:\n\n`;
-            reply += matches.map((m) => `- **[${m.name}](/product/${getSlug(m.name)})** ($${m.specs.starting_price}) - ${m.description}`).join("\n");
+            reply += matches.map((m) => `- **[${m.name}](/product/${getSlug(m.name)})** (${formatPrice(m.specs.starting_price)}) - ${m.description}`).join("\n");
             reply += `\n\nWould you like more details, specs, or options for any of these models?`;
           } 
           

@@ -40,7 +40,7 @@ import {
   Square,
   CheckSquare,
 } from "lucide-react";
-import { Product } from "@/app/data/products";
+import { Product, formatPrice } from "@/app/data/products";
 
 // Helper function to generate URL-safe slugs
 function getSlug(name: string): string {
@@ -1144,7 +1144,7 @@ export default function AdminPage() {
                     {name || "Premium Product Name"}
                   </h4>
                   <div className="text-sm font-extrabold text-white shrink-0">
-                    ${startingPrice ? startingPrice.toLocaleString() : "—"}
+                    {startingPrice ? formatPrice(startingPrice) : "—"}
                   </div>
                 </div>
 
@@ -1421,7 +1421,7 @@ export default function AdminPage() {
                       <div className="flex md:flex-col items-center md:items-end justify-between md:justify-center w-full md:w-auto shrink-0 gap-4 md:gap-2.5 border-t md:border-t-0 border-zinc-900 pt-4 md:pt-0">
                         <div className="flex flex-col items-start md:items-end">
                           <span className="text-[9px] font-extrabold text-zinc-600 uppercase tracking-widest">Starting Price</span>
-                          <span className="text-base font-extrabold text-white">${p.specs.starting_price.toLocaleString()}</span>
+                          <span className="text-base font-extrabold text-white">{formatPrice(p.specs.starting_price)}</span>
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">

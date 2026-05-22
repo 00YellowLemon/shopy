@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useCart } from "../context/CartContext";
+import { formatPrice } from "../data/products";
 import { X, Plus, Minus, Trash2, ShoppingBag, Sparkles, CheckCircle2 } from "lucide-react";
 
 export default function CartDrawer() {
@@ -179,7 +180,7 @@ export default function CartDrawer() {
 
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-extrabold text-white">
-                                  ${item.price * item.quantity}
+                                  {formatPrice(item.price * item.quantity)}
                                 </span>
                                 <button
                                   onClick={() =>
@@ -209,7 +210,7 @@ export default function CartDrawer() {
                     <div className="space-y-2 text-xs">
                       <div className="flex justify-between text-zinc-400">
                         <span>Subtotal</span>
-                        <span className="font-semibold text-white">${cartSubtotal}</span>
+                        <span className="font-semibold text-white">{formatPrice(cartSubtotal)}</span>
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>Shipping</span>
@@ -217,11 +218,11 @@ export default function CartDrawer() {
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>Estimated Taxes</span>
-                        <span className="font-semibold text-white">$0.00</span>
+                        <span className="font-semibold text-white">{formatPrice(0)}</span>
                       </div>
                       <div className="border-t border-zinc-800 pt-2 flex justify-between text-sm font-extrabold text-white">
                         <span>Order Total</span>
-                        <span>${cartSubtotal}</span>
+                        <span>{formatPrice(cartSubtotal)}</span>
                       </div>
                     </div>
 
@@ -288,13 +289,13 @@ export default function CartDrawer() {
                         <span className="text-zinc-400 line-clamp-1 max-w-[200px]">
                           {item.product.name} (x{item.quantity})
                         </span>
-                        <span className="font-semibold">${item.price * item.quantity}</span>
+                        <span className="font-semibold">{formatPrice(item.price * item.quantity)}</span>
                       </div>
                     ))}
                   </div>
                   <div className="border-t border-zinc-800 pt-2 flex justify-between text-xs font-bold text-white">
                     <span>Total Paid</span>
-                    <span>${cartSubtotal}</span>
+                    <span>{formatPrice(cartSubtotal)}</span>
                   </div>
                 </div>
 
